@@ -6,6 +6,15 @@ PDFを下絵にして、グループで決めたオブジェクトを配置し�
 
 `index.html` をブラウザで開きます。外部ライブラリは CDN から読み込みます。
 
+## 出力の検証（Node）
+
+ブラウザなしで、ネイティブ PDF 描画（元ページ保持・非画像・Noto 埋め込み）を確認できます。
+
+```bash
+npm install pdf-lib@1.17.1 @pdf-lib/fontkit@1.1.1
+node tests/native-pdf-export.node.mjs
+```
+
 ## 基本の流れ
 
 1. **PDF読込** で下絵を開く。
