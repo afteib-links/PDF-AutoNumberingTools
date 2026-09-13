@@ -200,7 +200,7 @@
                         </div>
                         <div>
                             <label class="field-title">フォント</label>
-                            <select id="group-font-select" class="full-input">
+                            <select id="group-font-select" class="full-input" title="PDF出力ではすべて Noto Sans JP に埋め込みます">
                                 <option value="Yu Gothic">游ゴシック</option>
                                 <option value="Noto Sans JP">Noto Sans JP</option>
                                 <option value="Hiragino Kaku Gothic ProN">ヒラギノ角ゴ</option>
@@ -580,6 +580,7 @@
     </div>
 
     <script src="https://unpkg.com/pdf-lib@1.17.1/dist/pdf-lib.min.js"></script>
+    <script src="https://unpkg.com/@pdf-lib/fontkit@1.1.1/dist/fontkit.umd.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.2/Sortable.min.js"></script>
     <script>
@@ -590,6 +591,7 @@
     <script src="./EditorModels.js"></script>
     <script src="./DBManager.js"></script>
     <script src="./CoordinateConverter.js"></script>
+    <script src="./PdfNativeExport.js"></script>
     <script src="./AppCore.js"></script>
     <script src="./main.js"></script>
 </body>
