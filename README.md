@@ -1,1 +1,3 @@
 # PDF-AutoNumberingTools
+
+PDFに自動連番付きのオブジェクトを生成するツール

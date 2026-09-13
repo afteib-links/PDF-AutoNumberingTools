@@ -1,0 +1,80 @@
+/**
+ * EditorModels.js
+ * データ構造モデル定義
+ */
+const ProjectModel = { 
+    id: 1, 
+    name: "", 
+    createdAt: new Date(), 
+    updatedAt: new Date(), 
+    currentPage: 0, 
+    zoomLevel: 1.0, 
+    pdfName: "", 
+    pdfPath: "" 
+};
+
+const GroupModel = { 
+    id: 1, 
+    projectId: 1, 
+    name: "", 
+    shape: "rectangle", 
+    width: 100, 
+    height: 40, 
+    isSizeAuto: false, 
+    hasBorder: true, 
+    borderWidth: 1.5, 
+    borderColor: "#000000", 
+    textColor: "#000000", 
+    startCap: "none", 
+    endCap: "none", 
+    capSize: 6,
+    font: "游ゴシック", 
+    fontSize: 12, 
+    bgColor: "#ffffff", 
+    bgOpacity: 0, 
+    defaultText: "項目:{auto:000}", 
+    startNumber: 1,
+    zIndex: 0,
+    isLocked: false,
+    isHidden: false
+};
+
+const InstanceModel = { 
+    id: 1, 
+    projectId: 1, 
+    groupId: 1, 
+    pageIndex: 0, 
+    order: 0, 
+    x: 0, 
+    y: 0, 
+    overrideShape: null, 
+    overrideWidth: null, 
+    overrideHeight: null, 
+    overrideSizeAuto: null, 
+    overrideHasBorder: null, 
+    overrideBorderWidth: null, 
+    overrideBorderColor: null, 
+    overrideTextColor: null, 
+    overrideBgColor: null, 
+    overrideBgOpacity: null, 
+    overrideText: null, 
+    overrideStartCap: null, 
+    overrideEndCap: null, 
+    overrideCapSize: null, 
+    overrideFontSize: null, 
+    overrideZIndex: null, 
+    isSizeLocked: false, 
+    isSizeAutoLocked: false, 
+    isHasBorderLocked: false, 
+    isBorderWidthLocked: false, 
+    isBorderColorLocked: false, 
+    isTextColorLocked: false, 
+    isBgColorLocked: false, 
+    isTextLocked: false, 
+    isCapsLocked: false, 
+    isCapSizeLocked: false, 
+    isFontSizeLocked: false, 
+    isZIndexLocked: false, 
+    isLocked: false, 
+    isHidden: false 
+};
