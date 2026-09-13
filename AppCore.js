@@ -1,6 +1,6 @@
 /**
  * AppCore.js
- * コアエンジン（描画最適化・個別オーバーライド完全判定・ネイティブPDF出力・安全保存対応版）
+ * コアエンジン（描画最適化・個別オーバーライド完全判定・画像／オブジェクトPDF出力・安全保存対応版）
  */
 class PdfEditorCore {
     constructor() {
@@ -724,7 +724,79 @@ class PdfEditorCore {
         ctx.closePath();
     }
 
-    async exportPdf() {
+    getSortedVisiblePageInstances(pageIdx) {
+        const pageInstances = this.instances.filter(inst => inst.pageIndex === pageIdx && !inst.isHidden);
+        pageInstances.sort((a, b) => {
+            const groupA = this.groups.find(g => g.id === a.groupId);
+            const groupB = this.groups.find(g => g.id === b.groupId);
+            const zA = a.isZIndexLocked && a.overrideZIndex !== null ? a.overrideZIndex : (groupA ? groupA.zIndex || 0 : 0);
+            const zB = b.isZIndexLocked && b.overrideZIndex !== null ? b.overrideZIndex : (groupB ? groupB.zIndex || 0 : 0);
+            if (zA !== zB) return zA - zB;
+            return a.order - b.order;
+        });
+        return pageInstances;
+    }
+
+    async overlayVectorObjects(pdfDoc, totalPages) {
+        if (typeof PdfNativeExport === 'undefined') {
+            throw new Error('PDFネイティブ出力モジュールが読み込まれていません。');
+        }
+        PdfNativeExport.registerFontkitOnDocument(pdfDoc);
+        const fontBytes = await PdfNativeExport.fetchNotoSansJpFontBytes();
+        const embeddedFont = await pdfDoc.embedFont(fontBytes, { subset: true });
+
+        for (let pageIdx = 0; pageIdx < totalPages; pageIdx++) {
+            const pageInstances = this.getSortedVisiblePageInstances(pageIdx);
+            if (pageInstances.length === 0) continue;
+
+            const page = pdfDoc.getPage(pageIdx);
+            for (const instance of pageInstances) {
+                const group = this.groups.find(g => g.id === instance.groupId);
+                if (!group || group.isHidden) continue;
+                const style = this.getInstanceStyle(instance, group);
+                const displayText = this.resolveAutoText(style.rawText, instance, group);
+                PdfNativeExport.drawInstanceOnPage(page, instance, style, displayText, embeddedFont);
+            }
+        }
+    }
+
+    async overlayImageObjects(pdfDoc, totalPages) {
+        const exportScale = 3.0;
+        for (let pageIdx = 0; pageIdx < totalPages; pageIdx++) {
+            const pageInstances = this.getSortedVisiblePageInstances(pageIdx);
+            if (pageInstances.length === 0) continue;
+
+            const page = pdfDoc.getPage(pageIdx);
+            const { width: ptW, height: ptH } = page.getSize();
+
+            const offCanvas = document.createElement('canvas');
+            offCanvas.width = ptW * exportScale;
+            offCanvas.height = ptH * exportScale;
+            const offCtx = offCanvas.getContext('2d');
+
+            const exportConverter = new CoordinateConverter();
+            exportConverter.setPageContext(ptW, ptH, null);
+            exportConverter.setZoom(exportScale);
+
+            for (const instance of pageInstances) {
+                const group = this.groups.find(g => g.id === instance.groupId);
+                if (!group || group.isHidden) continue;
+                this.drawInstance(instance, group, offCtx, exportConverter, true);
+            }
+
+            const pngDataUrl = offCanvas.toDataURL('image/png');
+            const pngImage = await pdfDoc.embedPng(pngDataUrl);
+            page.drawImage(pngImage, {
+                x: 0,
+                y: 0,
+                width: ptW,
+                height: ptH,
+            });
+        }
+    }
+
+    async exportPdf(mode = 'image') {
+        const exportMode = mode === 'vector' ? 'vector' : 'image';
         try {
             const { PDFDocument } = PDFLib;
             let pdfDoc = null;
@@ -781,37 +853,11 @@ class PdfEditorCore {
                 }
             }
 
-            if (typeof PdfNativeExport === 'undefined') {
-                throw new Error('PDFネイティブ出力モジュールが読み込まれていません。');
-            }
-            PdfNativeExport.registerFontkitOnDocument(pdfDoc);
-            const fontBytes = await PdfNativeExport.fetchNotoSansJpFontBytes();
-            const embeddedFont = await pdfDoc.embedFont(fontBytes, { subset: true });
-
             this.buildAutoTextIndexMap();
-
-            for (let pageIdx = 0; pageIdx < totalPages; pageIdx++) {
-                const pageInstances = this.instances.filter(inst => inst.pageIndex === pageIdx && !inst.isHidden);
-                if (pageInstances.length === 0) continue;
-
-                const page = pdfDoc.getPage(pageIdx);
-
-                pageInstances.sort((a, b) => {
-                    const groupA = this.groups.find(g => g.id === a.groupId);
-                    const groupB = this.groups.find(g => g.id === b.groupId);
-                    const zA = a.isZIndexLocked && a.overrideZIndex !== null ? a.overrideZIndex : (groupA ? groupA.zIndex || 0 : 0);
-                    const zB = b.isZIndexLocked && b.overrideZIndex !== null ? b.overrideZIndex : (groupB ? groupB.zIndex || 0 : 0);
-                    if (zA !== zB) return zA - zB;
-                    return a.order - b.order;
-                });
-
-                for (const instance of pageInstances) {
-                    const group = this.groups.find(g => g.id === instance.groupId);
-                    if (!group || group.isHidden) continue;
-                    const style = this.getInstanceStyle(instance, group);
-                    const displayText = this.resolveAutoText(style.rawText, instance, group);
-                    PdfNativeExport.drawInstanceOnPage(page, instance, style, displayText, embeddedFont);
-                }
+            if (exportMode === 'vector') {
+                await this.overlayVectorObjects(pdfDoc, totalPages);
+            } else {
+                await this.overlayImageObjects(pdfDoc, totalPages);
             }
 
             const pdfBytes = await pdfDoc.save();

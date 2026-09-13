@@ -52,6 +52,16 @@ function decodePdfStreams(raw) {
 }
 
 async function main() {
+    const { readFileSync } = await import('node:fs');
+    const appCoreSrc = readFileSync(join(root, 'AppCore.js'), 'utf8');
+    const indexSrc = readFileSync(join(root, 'index.html'), 'utf8');
+    assert(indexSrc.includes('id="pdf-export-mode-select"'), '出力方式セレクトがある');
+    assert(indexSrc.includes('value="image"') && indexSrc.includes('value="vector"'), '画像／オブジェクトの選択肢がある');
+    assert(appCoreSrc.includes("mode === 'vector'"), 'exportPdf が vector を分岐する');
+    assert(appCoreSrc.includes('overlayImageObjects'), '画像合成経路がある');
+    assert(appCoreSrc.includes("toDataURL('image/png')"), '画像経路は PNG 合成する');
+    assert(appCoreSrc.includes('overlayVectorObjects'), 'オブジェクト描画経路がある');
+
     const tri = PdfNativeExport.buildTriangleSvgPath(10, 20, 100, 40);
     assert(tri.includes('M 60 60'), '三角形の頂点は上辺中央 (PDF y 上向き)');
     assert(tri.includes('L 110 20'), '三角形の右下');

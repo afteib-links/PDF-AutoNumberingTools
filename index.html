@@ -34,6 +34,11 @@
                 </div>
 
                 <div class="toolbar-cluster">
+                    <span class="toolbar-label">出力</span>
+                    <select id="pdf-export-mode-select" class="toolbar-select" title="画像は見た目優先のPNG合成、オブジェクトはパス／文字として重ねます">
+                        <option value="image">画像</option>
+                        <option value="vector">オブジェクト</option>
+                    </select>
                     <button id="btn-generate-pdf" class="btn success">PDF出力</button>
                 </div>
             </div>
@@ -200,7 +205,7 @@
                         </div>
                         <div>
                             <label class="field-title">フォント</label>
-                            <select id="group-font-select" class="full-input" title="PDF出力ではすべて Noto Sans JP に埋め込みます">
+                            <select id="group-font-select" class="full-input" title="画面プレビュー用。オブジェクト出力では Noto Sans JP に埋め込みます">
                                 <option value="Yu Gothic">游ゴシック</option>
                                 <option value="Noto Sans JP">Noto Sans JP</option>
                                 <option value="Hiragino Kaku Gothic ProN">ヒラギノ角ゴ</option>
@@ -559,7 +564,7 @@
                         <li><strong>PDF差替</strong>: 下絵だけ差し替え、配置は残す（元PDFの更新向け）。</li>
                         <li><strong>保存</strong>: IndexedDB にタイムスタンプ付きの新規バージョンとして保存する。</li>
                         <li><strong>データ管理</strong>: 履歴の復元/削除、完全ファイル退避、JSON入出力。</li>
-                        <li><strong>PDF出力</strong>: 元ページの上に番号オブジェクトをパス／文字として重ねた PDF をダウンロードする（画像合成ではない）。フォントは Noto Sans JP を埋め込む。</li>
+                        <li><strong>PDF出力</strong>: ヘッダーの出力方式で「画像」（PNG合成、見た目優先）か「オブジェクト」（パス／埋め込み文字、Noto Sans JP）を選んでから書き出す。</li>
                     </ul>
                 </details>
 
