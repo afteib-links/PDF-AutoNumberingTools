@@ -2,10 +2,10 @@
  * ネイティブ PDF 出力の検証（Node、ブラウザ UI なし）
  */
 import { createRequire } from 'node:module';
-import { readFileSync, writeFileSync } from 'node:fs';
+import { inflateSync } from 'node:zlib';
+import { writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { createContext, runInContext } from 'node:vm';
 
 const require = createRequire(import.meta.url);
 const PDFLib = require('pdf-lib');
@@ -14,28 +14,41 @@ const fontkit = require('@pdf-lib/fontkit');
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const root = join(__dirname, '..');
 
-const sandbox = { PDFLib, fontkit, console, fetch, Uint8Array, ArrayBuffer };
-sandbox.globalThis = sandbox;
-sandbox.window = sandbox;
-sandbox.self = sandbox;
-sandbox.module = { exports: {} };
-sandbox.exports = sandbox.module.exports;
-const ctx = createContext(sandbox);
-runInContext(readFileSync(join(root, 'PdfNativeExport.js'), 'utf8'), ctx);
-const PdfNativeExport = sandbox.PdfNativeExport;
+globalThis.PDFLib = PDFLib;
+globalThis.fontkit = fontkit;
+const PdfNativeExport = require(join(root, 'PdfNativeExport.js'));
 
 function assert(cond, msg) {
     if (!cond) throw new Error(msg);
 }
 
-function countSubstring(hay, needle) {
-    let n = 0;
-    let i = 0;
-    while ((i = hay.indexOf(needle, i)) !== -1) {
-        n++;
-        i += needle.length;
+function hexBlobsToAscii(s) {
+    return s.replace(/<([0-9A-Fa-f]+)>/g, (_, h) => {
+        let out = '';
+        for (let i = 0; i < h.length; i += 2) {
+            out += String.fromCharCode(parseInt(h.slice(i, i + 2), 16));
+        }
+        return out;
+    });
+}
+
+function decodePdfStreams(raw) {
+    const parts = [];
+    const re = /stream\r?\n([\s\S]*?)endstream/g;
+    let m;
+    while ((m = re.exec(raw)) !== null) {
+        const bytes = Buffer.from(m[1], 'latin1');
+        try {
+            parts.push(inflateSync(bytes).toString('latin1'));
+        } catch (_) {
+            try {
+                parts.push(inflateSync(bytes.subarray(2)).toString('latin1'));
+            } catch (_) {
+                parts.push(m[1]);
+            }
+        }
     }
-    return n;
+    return parts.join('\n');
 }
 
 async function main() {
@@ -50,6 +63,10 @@ async function main() {
 
     const arrow = PdfNativeExport.buildArrowSvgPath(6);
     assert(arrow.startsWith('M 0 0'), '矢印は先端が原点');
+
+    assert(typeof PDFLib.concatTransformationMatrix === 'function', 'concatTransformationMatrix が pdf-lib にある');
+    assert(typeof PDFLib.radians === 'function', 'radians が pdf-lib にある');
+    assert(typeof PDFLib.rgb === 'function', 'rgb が pdf-lib にある');
 
     const { PDFDocument, StandardFonts } = PDFLib;
 
@@ -137,16 +154,19 @@ async function main() {
     }
     assert(hiddenSkip.length === 1 && hiddenSkip[0] === 1, '非表示インスタンス／グループは出力対象外: ' + hiddenSkip);
 
-    const pdfBytes = await outDoc.save();
+    const pdfBytes = await outDoc.save({ useObjectStreams: false });
     const raw = Buffer.from(pdfBytes).toString('latin1');
+    const decoded = hexBlobsToAscii(raw + '\n' + decodePdfStreams(raw));
 
-    assert(raw.includes('BASE_PAGE_CONTENT'), '元ページのテキストが残っている');
-    assert(raw.includes('/Subtype /Image') === false || countSubstring(raw, '/Subtype /Image') === 0, '画像XObjectを埋め込んでいない');
-    assert(!raw.includes('PNG'), 'PNG埋め込みがない');
-    assert(raw.includes('NotoSans') || raw.includes('NotoSansJP') || raw.includes('Noto'), 'Noto 系フォントが埋め込まれている');
-    assert(countSubstring(raw, ' re\n') + countSubstring(raw, ' re\r') > 0 || raw.includes(' re'), '矩形パス (re) がある');
-    assert(raw.includes(' Td') || raw.includes('Tj') || raw.includes('TJ'), 'テキスト演算子がある');
-    assert(raw.includes(' cm\n') || raw.includes(' cm\r') || /[\s]cm[\s]/.test(raw), '水平圧縮用の cm 変換がある');
+    assert(decoded.includes('BASE_PAGE_CONTENT'), '元ページのテキストが残っている');
+    assert(decoded.includes('Helvetica'), '元ページの Helvetica が残っている');
+    assert(!decoded.includes('/Subtype /Image'), '画像XObjectを埋め込んでいない');
+    assert(!raw.includes('IDAT'), 'PNGラスタ埋め込みがない');
+    assert(/NotoSansJP/i.test(decoded), 'Noto Sans JP が埋め込まれている');
+    assert(/\s[ml]\s/.test(decoded) || / m\n/.test(decoded) || decoded.includes(' m '), 'ベクトルパス (m/l) がある');
+    assert(/Tj|TJ/.test(decoded), 'テキスト演算子がある');
+    assert(/\scm[\s]/.test(decoded), 'cm 変換行列がある');
+    assert(/0\.\d+\s+0\s+0\s+1\s+\d/.test(decodePdfStreams(raw)), 'textScaleX < 1 の水平 cm がある');
 
     const outPath = join('/tmp', 'native-export-sample.pdf');
     writeFileSync(outPath, pdfBytes);
