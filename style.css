@@ -104,6 +104,17 @@ body, html {
 }
 .zoom-unit { font-size: 12px; color: var(--text-muted); margin-left: 2px; }
 
+.toolbar-select {
+    height: var(--control-height);
+    padding: 0 8px;
+    border: 1px solid var(--border-color);
+    border-radius: 6px;
+    background: var(--bg-white);
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--text-main);
+}
+
 .btn {
     min-height: var(--control-height);
     padding: 0 12px;

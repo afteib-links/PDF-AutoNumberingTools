@@ -1,6 +1,6 @@
 /**
  * AppCore.js
- * コアエンジン（描画最適化・個別オーバーライド完全判定・高解像度PDF出力・安全保存対応版）
+ * コアエンジン（描画最適化・個別オーバーライド完全判定・画像／オブジェクトPDF出力・安全保存対応版）
  */
 class PdfEditorCore {
     constructor() {
@@ -427,55 +427,71 @@ class PdfEditorCore {
         ctx.restore();
     }
 
-    drawInstance(instance, group, ctx, converter, isExport = false) {
+    getInstanceStyle(instance, group) {
         const shape = instance.overrideShape || group.shape;
-        
-        const isAuto = instance.isSizeAutoLocked && instance.overrideSizeAuto !== null 
-            ? instance.overrideSizeAuto 
+        const isAuto = instance.isSizeAutoLocked && instance.overrideSizeAuto !== null
+            ? instance.overrideSizeAuto
             : (group.isSizeAuto || false);
-            
-        const hasBorder = instance.isHasBorderLocked && instance.overrideHasBorder !== null 
-            ? instance.overrideHasBorder 
+        const hasBorder = instance.isHasBorderLocked && instance.overrideHasBorder !== null
+            ? instance.overrideHasBorder
             : (group.hasBorder !== undefined ? group.hasBorder : true);
-        
-        const bWidth = instance.isBorderWidthLocked && instance.overrideBorderWidth !== null 
-            ? instance.overrideBorderWidth 
+        const bWidth = instance.isBorderWidthLocked && instance.overrideBorderWidth !== null
+            ? instance.overrideBorderWidth
             : (group.borderWidth !== undefined ? group.borderWidth : 1.5);
-            
-        const bColor = instance.isBorderColorLocked && instance.overrideBorderColor 
-            ? instance.overrideBorderColor 
+        const bColor = instance.isBorderColorLocked && instance.overrideBorderColor
+            ? instance.overrideBorderColor
             : (group.borderColor || '#000000');
-            
-        const tColor = instance.isTextColorLocked && instance.overrideTextColor 
-            ? instance.overrideTextColor 
+        const tColor = instance.isTextColorLocked && instance.overrideTextColor
+            ? instance.overrideTextColor
             : (group.textColor || '#000000');
-        
-        const bgColor = instance.isBgColorLocked && instance.overrideBgColor 
-            ? instance.overrideBgColor 
+        const bgColor = instance.isBgColorLocked && instance.overrideBgColor
+            ? instance.overrideBgColor
             : (group.bgColor || '#ffffff');
-        const bgOpacity = instance.isBgColorLocked && instance.overrideBgOpacity !== null 
-            ? instance.overrideBgOpacity 
+        const bgOpacity = instance.isBgColorLocked && instance.overrideBgOpacity !== null
+            ? instance.overrideBgOpacity
             : (group.bgOpacity !== undefined ? group.bgOpacity : 0);
-        
-        const startCap = instance.isCapsLocked && instance.overrideStartCap 
-            ? instance.overrideStartCap 
+        const startCap = instance.isCapsLocked && instance.overrideStartCap
+            ? instance.overrideStartCap
             : (group.startCap || 'none');
-        const endCap = instance.isCapsLocked && instance.overrideEndCap 
-            ? instance.overrideEndCap 
+        const endCap = instance.isCapsLocked && instance.overrideEndCap
+            ? instance.overrideEndCap
             : (group.endCap || 'none');
-        const capSize = instance.isCapSizeLocked && instance.overrideCapSize !== null 
-            ? instance.overrideCapSize 
+        const capSize = instance.isCapSizeLocked && instance.overrideCapSize !== null
+            ? instance.overrideCapSize
             : (group.capSize !== undefined ? group.capSize : 6);
-
-        const fontSize = instance.isFontSizeLocked && instance.overrideFontSize 
-            ? instance.overrideFontSize 
+        const fontSize = instance.isFontSizeLocked && instance.overrideFontSize
+            ? instance.overrideFontSize
             : group.fontSize;
-            
-        const rawText = instance.isTextLocked && instance.overrideText !== null 
-            ? instance.overrideText 
+        const rawText = instance.isTextLocked && instance.overrideText !== null
+            ? instance.overrideText
             : group.defaultText;
-        
-        const displayText = this.resolveAutoText(rawText, instance, group);
+        const width = instance.isSizeLocked && instance.overrideWidth !== null
+            ? instance.overrideWidth
+            : group.width;
+        const height = instance.isSizeLocked && instance.overrideHeight !== null
+            ? instance.overrideHeight
+            : group.height;
+        return {
+            shape, isAuto, hasBorder, bWidth, bColor, tColor,
+            bgColor, bgOpacity, startCap, endCap, capSize, fontSize, rawText, width, height
+        };
+    }
+
+    drawInstance(instance, group, ctx, converter, isExport = false) {
+        const style = this.getInstanceStyle(instance, group);
+        const shape = style.shape;
+        const isAuto = style.isAuto;
+        const hasBorder = style.hasBorder;
+        const bWidth = style.bWidth;
+        const bColor = style.bColor;
+        const tColor = style.tColor;
+        const bgColor = style.bgColor;
+        const bgOpacity = style.bgOpacity;
+        const startCap = style.startCap;
+        const endCap = style.endCap;
+        const capSize = style.capSize;
+        const fontSize = style.fontSize;
+        const displayText = this.resolveAutoText(style.rawText, instance, group);
         const lines = displayText.split('\n');
         
         const renderFontSize = fontSize * converter.zoomLevel;
@@ -489,8 +505,8 @@ class PdfEditorCore {
         const lineHeight = renderFontSize * 1.25;
         const totalTextHeight = lines.length * lineHeight;
 
-        const ptWidth = instance.isSizeLocked && instance.overrideWidth !== null ? instance.overrideWidth : group.width;
-        const ptHeight = instance.isSizeLocked && instance.overrideHeight !== null ? instance.overrideHeight : group.height;
+        const ptWidth = style.width;
+        const ptHeight = style.height;
         const screenRect = converter.pdfPointsToScreenPixels(instance.x, instance.y, ptWidth, ptHeight, shape === 'line');
 
         let textScaleX = 1.0; 
@@ -708,7 +724,79 @@ class PdfEditorCore {
         ctx.closePath();
     }
 
-    async exportPdf() {
+    getSortedVisiblePageInstances(pageIdx) {
+        const pageInstances = this.instances.filter(inst => inst.pageIndex === pageIdx && !inst.isHidden);
+        pageInstances.sort((a, b) => {
+            const groupA = this.groups.find(g => g.id === a.groupId);
+            const groupB = this.groups.find(g => g.id === b.groupId);
+            const zA = a.isZIndexLocked && a.overrideZIndex !== null ? a.overrideZIndex : (groupA ? groupA.zIndex || 0 : 0);
+            const zB = b.isZIndexLocked && b.overrideZIndex !== null ? b.overrideZIndex : (groupB ? groupB.zIndex || 0 : 0);
+            if (zA !== zB) return zA - zB;
+            return a.order - b.order;
+        });
+        return pageInstances;
+    }
+
+    async overlayVectorObjects(pdfDoc, totalPages) {
+        if (typeof PdfNativeExport === 'undefined') {
+            throw new Error('PDFネイティブ出力モジュールが読み込まれていません。');
+        }
+        PdfNativeExport.registerFontkitOnDocument(pdfDoc);
+        const fontBytes = await PdfNativeExport.fetchNotoSansJpFontBytes();
+        const embeddedFont = await pdfDoc.embedFont(fontBytes, { subset: true });
+
+        for (let pageIdx = 0; pageIdx < totalPages; pageIdx++) {
+            const pageInstances = this.getSortedVisiblePageInstances(pageIdx);
+            if (pageInstances.length === 0) continue;
+
+            const page = pdfDoc.getPage(pageIdx);
+            for (const instance of pageInstances) {
+                const group = this.groups.find(g => g.id === instance.groupId);
+                if (!group || group.isHidden) continue;
+                const style = this.getInstanceStyle(instance, group);
+                const displayText = this.resolveAutoText(style.rawText, instance, group);
+                PdfNativeExport.drawInstanceOnPage(page, instance, style, displayText, embeddedFont);
+            }
+        }
+    }
+
+    async overlayImageObjects(pdfDoc, totalPages) {
+        const exportScale = 3.0;
+        for (let pageIdx = 0; pageIdx < totalPages; pageIdx++) {
+            const pageInstances = this.getSortedVisiblePageInstances(pageIdx);
+            if (pageInstances.length === 0) continue;
+
+            const page = pdfDoc.getPage(pageIdx);
+            const { width: ptW, height: ptH } = page.getSize();
+
+            const offCanvas = document.createElement('canvas');
+            offCanvas.width = ptW * exportScale;
+            offCanvas.height = ptH * exportScale;
+            const offCtx = offCanvas.getContext('2d');
+
+            const exportConverter = new CoordinateConverter();
+            exportConverter.setPageContext(ptW, ptH, null);
+            exportConverter.setZoom(exportScale);
+
+            for (const instance of pageInstances) {
+                const group = this.groups.find(g => g.id === instance.groupId);
+                if (!group || group.isHidden) continue;
+                this.drawInstance(instance, group, offCtx, exportConverter, true);
+            }
+
+            const pngDataUrl = offCanvas.toDataURL('image/png');
+            const pngImage = await pdfDoc.embedPng(pngDataUrl);
+            page.drawImage(pngImage, {
+                x: 0,
+                y: 0,
+                width: ptW,
+                height: ptH,
+            });
+        }
+    }
+
+    async exportPdf(mode = 'image') {
+        const exportMode = mode === 'vector' ? 'vector' : 'image';
         try {
             const { PDFDocument } = PDFLib;
             let pdfDoc = null;
@@ -765,49 +853,11 @@ class PdfEditorCore {
                 }
             }
 
-            const exportScale = 3.0; 
             this.buildAutoTextIndexMap();
-
-            for (let pageIdx = 0; pageIdx < totalPages; pageIdx++) {
-                const pageInstances = this.instances.filter(inst => inst.pageIndex === pageIdx && !inst.isHidden);
-                if (pageInstances.length === 0) continue;
-
-                const page = pdfDoc.getPage(pageIdx);
-                const { width: ptW, height: ptH } = page.getSize();
-
-                const offCanvas = document.createElement('canvas');
-                offCanvas.width = ptW * exportScale;
-                offCanvas.height = ptH * exportScale;
-                const offCtx = offCanvas.getContext('2d');
-
-                const exportConverter = new CoordinateConverter();
-                exportConverter.setPageContext(ptW, ptH, null);
-                exportConverter.setZoom(exportScale);
-
-                pageInstances.sort((a, b) => {
-                    const groupA = this.groups.find(g => g.id === a.groupId);
-                    const groupB = this.groups.find(g => g.id === b.groupId);
-                    const zA = a.isZIndexLocked && a.overrideZIndex !== null ? a.overrideZIndex : (groupA ? groupA.zIndex || 0 : 0);
-                    const zB = b.isZIndexLocked && b.overrideZIndex !== null ? b.overrideZIndex : (groupB ? groupB.zIndex || 0 : 0);
-                    if (zA !== zB) return zA - zB;
-                    return a.order - b.order;
-                });
-
-                for (const instance of pageInstances) {
-                    const group = this.groups.find(g => g.id === instance.groupId);
-                    if (!group || group.isHidden) continue;
-                    this.drawInstance(instance, group, offCtx, exportConverter, true);
-                }
-
-                const pngDataUrl = offCanvas.toDataURL('image/png');
-                const pngImage = await pdfDoc.embedPng(pngDataUrl);
-
-                page.drawImage(pngImage, {
-                    x: 0,
-                    y: 0,
-                    width: ptW,
-                    height: ptH,
-                });
+            if (exportMode === 'vector') {
+                await this.overlayVectorObjects(pdfDoc, totalPages);
+            } else {
+                await this.overlayImageObjects(pdfDoc, totalPages);
             }
 
             const pdfBytes = await pdfDoc.save();

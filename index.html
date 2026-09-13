@@ -34,6 +34,11 @@
                 </div>
 
                 <div class="toolbar-cluster">
+                    <span class="toolbar-label">出力</span>
+                    <select id="pdf-export-mode-select" class="toolbar-select" title="画像は見た目優先のPNG合成、オブジェクトはパス／文字として重ねます">
+                        <option value="image">画像</option>
+                        <option value="vector">オブジェクト</option>
+                    </select>
                     <button id="btn-generate-pdf" class="btn success">PDF出力</button>
                 </div>
             </div>
@@ -200,7 +205,7 @@
                         </div>
                         <div>
                             <label class="field-title">フォント</label>
-                            <select id="group-font-select" class="full-input">
+                            <select id="group-font-select" class="full-input" title="画面プレビュー用。オブジェクト出力では Noto Sans JP に埋め込みます">
                                 <option value="Yu Gothic">游ゴシック</option>
                                 <option value="Noto Sans JP">Noto Sans JP</option>
                                 <option value="Hiragino Kaku Gothic ProN">ヒラギノ角ゴ</option>
@@ -559,7 +564,7 @@
                         <li><strong>PDF差替</strong>: 下絵だけ差し替え、配置は残す（元PDFの更新向け）。</li>
                         <li><strong>保存</strong>: IndexedDB にタイムスタンプ付きの新規バージョンとして保存する。</li>
                         <li><strong>データ管理</strong>: 履歴の復元/削除、完全ファイル退避、JSON入出力。</li>
-                        <li><strong>PDF出力</strong>: オーバーレイを画像として合成した PDF をダウンロードする。</li>
+                        <li><strong>PDF出力</strong>: ヘッダーの出力方式で「画像」（PNG合成、見た目優先）か「オブジェクト」（パス／埋め込み文字、Noto Sans JP）を選んでから書き出す。</li>
                     </ul>
                 </details>
 
@@ -580,6 +585,7 @@
     </div>
 
     <script src="https://unpkg.com/pdf-lib@1.17.1/dist/pdf-lib.min.js"></script>
+    <script src="https://unpkg.com/@pdf-lib/fontkit@1.1.1/dist/fontkit.umd.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.2/Sortable.min.js"></script>
     <script>
@@ -590,6 +596,7 @@
     <script src="./EditorModels.js"></script>
     <script src="./DBManager.js"></script>
     <script src="./CoordinateConverter.js"></script>
+    <script src="./PdfNativeExport.js"></script>
     <script src="./AppCore.js"></script>
     <script src="./main.js"></script>
 </body>

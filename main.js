@@ -55,6 +55,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     const btnSaveProject = document.getElementById('btn-save-project');
     const projectNameInput = document.getElementById('project-name');
     const btnGeneratePdf = document.getElementById('btn-generate-pdf');
+    const pdfExportModeSelect = document.getElementById('pdf-export-mode-select');
 
     // 左サイドバー：グループマスター & インライン設定パネル
     const groupCardsContainer = document.getElementById('group-cards-container');
@@ -398,7 +399,10 @@ document.addEventListener('DOMContentLoaded', async () => {
     btnSaveProject.addEventListener('click', executeSaveVersion);
     btnHistorySaveCurrent.addEventListener('click', executeSaveVersion);
 
-    btnGeneratePdf.addEventListener('click', () => core.exportPdf());
+    btnGeneratePdf.addEventListener('click', () => {
+        const mode = pdfExportModeSelect ? pdfExportModeSelect.value : 'image';
+        core.exportPdf(mode);
+    });
 
     function hideInlineGroupPanel() {
         inlineGroupPanel.classList.remove('is-open');
