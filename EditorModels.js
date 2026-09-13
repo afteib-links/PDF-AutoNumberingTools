@@ -28,7 +28,7 @@ const GroupModel = {
     startCap: "none", 
     endCap: "none", 
     capSize: 6,
-    font: "游ゴシック", 
+    font: "Yu Gothic", 
     fontSize: 12, 
     bgColor: "#ffffff", 
     bgOpacity: 0, 

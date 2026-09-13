@@ -85,6 +85,12 @@ document.addEventListener('DOMContentLoaded', async () => {
     const groupIsHidden = document.getElementById('group-is-hidden');
     const groupTextInput = document.getElementById('group-text-input');
     const groupStartNum = document.getElementById('group-startnum-input');
+    const groupCapSize = document.getElementById('group-capsize-input');
+    const appStatus = document.getElementById('app-status');
+    const helpModal = document.getElementById('help-modal');
+    const btnHelp = document.getElementById('btn-help');
+    const closeHelpModal = document.getElementById('close-help-modal');
+    const btnHelpModalClose = document.getElementById('btn-help-modal-close');
 
     // 右サイドバー：アコーディオン
     const groupedAccordionContainer = document.getElementById('grouped-instance-accordion');
@@ -119,6 +125,9 @@ document.addEventListener('DOMContentLoaded', async () => {
     const instStartCap = document.getElementById('inst-startcap');
     const instEndCap = document.getElementById('inst-endcap');
     const instLineRow = document.getElementById('inst-line-row');
+    const flagOverrideCapSize = document.getElementById('flag-override-capsize');
+    const instCapSize = document.getElementById('inst-cap-size');
+    const instCapSizeRow = document.getElementById('inst-capsize-row');
 
     const flagOverrideHasBorder = document.getElementById('flag-override-hasborder');
     const instHasBorder = document.getElementById('inst-has-border');
@@ -171,6 +180,8 @@ document.addEventListener('DOMContentLoaded', async () => {
     let activeGroupId = null;
     let editingInstance = null;
     const collapsedGroupIds = new Set();
+    const sortableInstances = [];
+    let arrowNudgeHistoryReady = true;
 
     let isDragging = false;
     let dragMode = 'move'; 
@@ -196,6 +207,45 @@ document.addEventListener('DOMContentLoaded', async () => {
         }
     });
 
+    function isTypingTarget(el) {
+        if (!el) return false;
+        const tag = (el.tagName || '').toLowerCase();
+        return tag === 'input' || tag === 'textarea' || tag === 'select' || el.isContentEditable;
+    }
+
+    function isGroupLocked(groupOrId) {
+        const group = typeof groupOrId === 'object' ? groupOrId : core.groups.find(g => g.id === groupOrId);
+        return !!(group && group.isLocked);
+    }
+
+    function isInstanceLocked(inst) {
+        if (!inst) return true;
+        if (inst.isLocked) return true;
+        return isGroupLocked(inst.groupId);
+    }
+
+    function getInstanceZ(inst) {
+        const group = core.groups.find(g => g.id === inst.groupId);
+        return inst.isZIndexLocked && inst.overrideZIndex !== null ? inst.overrideZIndex : (group ? group.zIndex || 0 : 0);
+    }
+
+    function getPaintSortedInstances(pageIndex) {
+        return core.instances
+            .filter(i => i.pageIndex === pageIndex)
+            .sort((a, b) => {
+                const z = getInstanceZ(a) - getInstanceZ(b);
+                if (z !== 0) return z;
+                return a.order - b.order;
+            });
+    }
+
+    function updateStatusBar() {
+        if (!appStatus) return;
+        const modeLabel = currentMode === 'draw' ? '登録モード（クリックで配置）' : '選択モード';
+        const zoom = Math.round(core.coordConverter.zoomLevel * 100);
+        appStatus.textContent = `${modeLabel} | 選択 ${core.selectedInstanceIds.size}件 | ${zoom}%`;
+    }
+
     function setMode(mode) {
         currentMode = mode;
         if (mode === 'select') {
@@ -207,6 +257,7 @@ document.addEventListener('DOMContentLoaded', async () => {
             btnModeSelect.classList.remove('active');
             core.layerCanvas.style.cursor = 'crosshair';
         }
+        updateStatusBar();
     }
 
     btnModeSelect.addEventListener('click', () => setMode('select'));
@@ -227,6 +278,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         loadActiveGroupIntoInlinePanel();
         renderGroupedAccordion();
         updateHistoryButtons();
+        updateStatusBar();
     });
 
     btnRedo.addEventListener('click', () => {
@@ -240,15 +292,20 @@ document.addEventListener('DOMContentLoaded', async () => {
         core.groups = next.groups;
         core.selectedInstanceIds.clear();
         core.renderInteractiveLayer();
+        renderGroupCards();
+        loadActiveGroupIntoInlinePanel();
         renderGroupedAccordion();
         updateHistoryButtons();
+        updateStatusBar();
     });
 
     window.addEventListener('keydown', (e) => {
         if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'z' && !e.shiftKey) {
+            if (isTypingTarget(e.target)) return;
             e.preventDefault();
             btnUndo.click();
         } else if ((e.ctrlKey || e.metaKey) && (e.key.toLowerCase() === 'y' || (e.shiftKey && e.key.toLowerCase() === 'z'))) {
+            if (isTypingTarget(e.target)) return;
             e.preventDefault();
             btnRedo.click();
         }
@@ -264,10 +321,23 @@ document.addEventListener('DOMContentLoaded', async () => {
     loadPdfFileInput.addEventListener('change', async (e) => {
         const file = e.target.files[0];
         if (!file) return;
+        if (core.groups.length > 0 || core.instances.length > 0) {
+            const clearOverlays = confirm('配置データが残っています。\nOK: 配置を消去して新しいPDFを読み込む\nキャンセル: 配置を残してPDFだけ差し替える');
+            if (clearOverlays) {
+                pushHistory();
+                core.groups = [];
+                core.instances = [];
+                core.selectedInstanceIds.clear();
+                activeGroupId = null;
+                hideInlineGroupPanel();
+                renderGroupCards();
+            }
+        }
         const success = await core.loadPdfFile(file);
         if (success) {
             updatePageIndicator();
             renderGroupedAccordion();
+            updateStatusBar();
         }
         loadPdfFileInput.value = '';
     });
@@ -302,6 +372,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     const applyZoom = async (newZoom) => {
         await core.setZoom(newZoom / 100);
         zoomInput.value = Math.round(core.coordConverter.zoomLevel * 100);
+        updateStatusBar();
     };
     btnZoomIn.addEventListener('click', () => applyZoom(Math.round(core.coordConverter.zoomLevel * 100) + 10));
     btnZoomOut.addEventListener('click', () => applyZoom(Math.round(core.coordConverter.zoomLevel * 100) - 10));
@@ -330,14 +401,14 @@ document.addEventListener('DOMContentLoaded', async () => {
     btnGeneratePdf.addEventListener('click', () => core.exportPdf());
 
     function hideInlineGroupPanel() {
-        inlineGroupPanel.style.display = 'none';
+        inlineGroupPanel.classList.remove('is-open');
     }
 
     function showInlineGroupPanel(groupId) {
         activeGroupId = groupId;
         renderGroupCards();
         loadActiveGroupIntoInlinePanel();
-        inlineGroupPanel.style.display = 'block';
+        inlineGroupPanel.classList.add('is-open');
     }
 
     function renderGroupCards() {
@@ -357,17 +428,31 @@ document.addEventListener('DOMContentLoaded', async () => {
             info.innerHTML = `<div class="group-card-name">${g.name || '無題グループ'}</div>
                               <div class="group-card-meta">${g.shape} / ${g.width}×${g.height}pt</div>`;
 
+            const actions = document.createElement('div');
+            actions.className = 'group-card-actions';
+
             const btnSetting = document.createElement('button');
             btnSetting.className = 'btn small btn-group-setting';
-            btnSetting.innerHTML = '⚙️ 設定';
+            btnSetting.textContent = '設定';
             btnSetting.addEventListener('click', (e) => {
                 e.stopPropagation();
                 showInlineGroupPanel(g.id);
             });
 
+            const btnDeleteGroup = document.createElement('button');
+            btnDeleteGroup.className = 'btn small danger';
+            btnDeleteGroup.textContent = '削除';
+            btnDeleteGroup.addEventListener('click', (e) => {
+                e.stopPropagation();
+                deleteGroup(g.id);
+            });
+
+            actions.appendChild(btnSetting);
+            actions.appendChild(btnDeleteGroup);
+
             card.appendChild(canvas);
             card.appendChild(info);
-            card.appendChild(btnSetting);
+            card.appendChild(actions);
 
             card.addEventListener('click', () => {
                 activeGroupId = g.id;
@@ -399,7 +484,8 @@ document.addEventListener('DOMContentLoaded', async () => {
         groupTextColor.value = g.textColor || '#000000';
         syncColorDisplay(groupTextColor, groupTextColorText);
 
-        groupFontSelect.value = g.font || '游ゴシック';
+        const fontMap = { '游ゴシック': 'Yu Gothic' };
+        groupFontSelect.value = fontMap[g.font] || g.font || 'Yu Gothic';
         groupFontSize.value = g.fontSize;
         groupBgColor.value = g.bgColor || '#ffffff';
         syncColorDisplay(groupBgColor, groupBgColorText);
@@ -410,10 +496,11 @@ document.addEventListener('DOMContentLoaded', async () => {
         groupIsHidden.checked = g.isHidden;
         groupTextInput.value = g.defaultText;
         groupStartNum.value = g.startNumber;
+        groupCapSize.value = g.capSize !== undefined ? g.capSize : 6;
 
         groupStartCap.value = g.startCap || 'none';
         groupEndCap.value = g.endCap || 'none';
-        groupLineSettings.style.display = g.shape === 'line' ? 'grid' : 'none';
+        groupLineSettings.classList.toggle('is-visible', g.shape === 'line');
     }
 
     function drawGroupMiniPreview(canvas, group) {
@@ -496,6 +583,30 @@ document.addEventListener('DOMContentLoaded', async () => {
         showInlineGroupPanel(newId);
     });
 
+    function deleteGroup(groupId) {
+        const group = core.groups.find(g => g.id === groupId);
+        if (!group) return;
+        const memberCount = core.instances.filter(i => i.groupId === groupId).length;
+        const message = memberCount > 0
+            ? `グループ「${group.name}」と所属オブジェクト ${memberCount} 件を削除しますか？`
+            : `グループ「${group.name}」を削除しますか？`;
+        if (!confirm(message)) return;
+        pushHistory();
+        core.instances = core.instances.filter(i => i.groupId !== groupId);
+        core.groups = core.groups.filter(g => g.id !== groupId);
+        core.selectedInstanceIds.forEach(id => {
+            if (!core.instances.some(i => i.id === id)) core.selectedInstanceIds.delete(id);
+        });
+        if (activeGroupId === groupId) {
+            activeGroupId = core.groups.length ? core.groups[0].id : null;
+            hideInlineGroupPanel();
+        }
+        renderGroupCards();
+        core.renderInteractiveLayer();
+        renderGroupedAccordion();
+        updateStatusBar();
+    }
+
     const syncGroupFromInputs = () => {
         const g = core.groups.find(item => item.id === activeGroupId);
         if (!g) return;
@@ -520,7 +631,8 @@ document.addEventListener('DOMContentLoaded', async () => {
 
         g.startCap = groupStartCap.value;
         g.endCap = groupEndCap.value;
-        groupLineSettings.style.display = g.shape === 'line' ? 'grid' : 'none';
+        g.capSize = parseFloat(groupCapSize.value) || 6;
+        groupLineSettings.classList.toggle('is-visible', g.shape === 'line');
 
         syncColorDisplay(groupBorderColor, groupBorderColorText);
         syncColorDisplay(groupTextColor, groupTextColorText);
@@ -535,12 +647,16 @@ document.addEventListener('DOMContentLoaded', async () => {
      groupHasBorder, groupBorderWidth, groupBorderColor, groupTextColor, groupFontSelect,
      groupFontSize, groupBgColor, groupBgOpacity, groupZIndex,
      groupIsLocked, groupIsHidden, groupTextInput, groupStartNum,
-     groupStartCap, groupEndCap].forEach(el => {
+     groupStartCap, groupEndCap, groupCapSize].forEach(el => {
         el.addEventListener('input', syncGroupFromInputs);
         el.addEventListener('change', () => { syncGroupFromInputs(); pushHistory(); });
     });
 
     function renderGroupedAccordion() {
+        sortableInstances.forEach(s => {
+            try { s.destroy(); } catch (err) { /* ignore */ }
+        });
+        sortableInstances.length = 0;
         groupedAccordionContainer.innerHTML = '';
         const curPage = core.currentPageNum - 1;
         const pageInstances = core.instances.filter(i => i.pageIndex === curPage);
@@ -614,6 +730,7 @@ document.addEventListener('DOMContentLoaded', async () => {
                     inst.isBgColorLocked ||
                     inst.isFontSizeLocked ||
                     inst.isZIndexLocked ||
+                    inst.isCapSizeLocked ||
                     (inst.isTextLocked && inst.overrideText !== null)
                 );
 
@@ -636,6 +753,7 @@ document.addEventListener('DOMContentLoaded', async () => {
                     core.selectedInstanceIds.delete(inst.id);
                     core.renderInteractiveLayer();
                     renderGroupedAccordion();
+                    updateStatusBar();
                 });
 
                 item.appendChild(handle);
@@ -652,6 +770,7 @@ document.addEventListener('DOMContentLoaded', async () => {
                     }
                     core.renderInteractiveLayer();
                     renderGroupedAccordion();
+                    updateStatusBar();
                 });
 
                 item.addEventListener('dblclick', () => openInstanceModal(inst));
@@ -663,7 +782,7 @@ document.addEventListener('DOMContentLoaded', async () => {
             groupedAccordionContainer.appendChild(groupBlock);
 
             if (typeof Sortable !== 'undefined') {
-                new Sortable(bodyList, {
+                const sortable = new Sortable(bodyList, {
                     handle: '.drag-handle',
                     animation: 150,
                     onEnd: () => {
@@ -678,6 +797,7 @@ document.addEventListener('DOMContentLoaded', async () => {
                         renderGroupedAccordion();
                     }
                 });
+                sortableInstances.push(sortable);
             }
         });
     }
@@ -705,6 +825,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     bindOverridePair(flagOverrideSize, [instWidth, instHeight], flagOverrideSize.closest('.override-card'));
     bindOverridePair(flagOverrideAutosize, instSizeAuto, flagOverrideAutosize.closest('.override-card'));
     bindOverridePair(flagOverrideCaps, [instStartCap, instEndCap], flagOverrideCaps.closest('.override-card'));
+    bindOverridePair(flagOverrideCapSize, instCapSize, flagOverrideCapSize.closest('.override-card'));
     bindOverridePair(flagOverrideHasBorder, instHasBorder, flagOverrideHasBorder.closest('.override-card'));
     bindOverridePair(flagOverrideBorderWidth, instBorderWidth, flagOverrideBorderWidth.closest('.override-card'));
     bindOverridePair(flagOverrideBorderColor, instBorderColor, flagOverrideBorderColor.closest('.override-card'));
@@ -740,6 +861,10 @@ document.addEventListener('DOMContentLoaded', async () => {
         instEndCap.value = inst.overrideEndCap !== null ? inst.overrideEndCap : (g.endCap || 'none');
         const effectiveShape = inst.overrideShape || g.shape;
         instLineRow.style.display = effectiveShape === 'line' ? 'flex' : 'none';
+        instCapSizeRow.style.display = effectiveShape === 'line' ? 'flex' : 'none';
+
+        flagOverrideCapSize.checked = !!inst.isCapSizeLocked;
+        instCapSize.value = inst.overrideCapSize !== null ? inst.overrideCapSize : (g.capSize !== undefined ? g.capSize : 6);
 
         flagOverrideHasBorder.checked = !!inst.isHasBorderLocked;
         instHasBorder.checked = inst.overrideHasBorder !== null ? inst.overrideHasBorder : g.hasBorder;
@@ -769,7 +894,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         flagOverrideText.checked = !!inst.isTextLocked;
         instText.value = inst.overrideText !== null ? inst.overrideText : g.defaultText;
 
-        [flagOverrideShape, flagOverrideSize, flagOverrideAutosize, flagOverrideCaps,
+        [flagOverrideShape, flagOverrideSize, flagOverrideAutosize, flagOverrideCaps, flagOverrideCapSize,
          flagOverrideHasBorder, flagOverrideBorderWidth, flagOverrideBorderColor,
          flagOverrideTextColor, flagOverrideBgColor, flagOverrideFontSize,
          flagOverrideZIndex, flagOverrideText].forEach(chk => {
@@ -823,6 +948,14 @@ document.addEventListener('DOMContentLoaded', async () => {
             editingInstance.isCapsLocked = false;
             editingInstance.overrideStartCap = null;
             editingInstance.overrideEndCap = null;
+        }
+
+        if (flagOverrideCapSize.checked) {
+            editingInstance.isCapSizeLocked = true;
+            editingInstance.overrideCapSize = parseFloat(instCapSize.value) || 6;
+        } else {
+            editingInstance.isCapSizeLocked = false;
+            editingInstance.overrideCapSize = null;
         }
 
         if (flagOverrideHasBorder.checked) {
@@ -894,6 +1027,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         instanceModal.style.display = 'none';
         core.renderInteractiveLayer();
         renderGroupedAccordion();
+        updateStatusBar();
     });
 
     const layerCanvas = document.getElementById('interactive-layer-canvas');
@@ -908,23 +1042,32 @@ document.addEventListener('DOMContentLoaded', async () => {
         const curPage = core.currentPageNum - 1;
 
         if (currentMode === 'draw') {
+            if (core.groups.length === 0) {
+                alert('先にグループを作成してください。');
+                return;
+            }
             if (!activeGroupId) {
-                if (core.groups.length > 0) activeGroupId = core.groups[0].id;
-                else return;
+                activeGroupId = core.groups[0].id;
             }
             const group = core.groups.find(g => g.id === activeGroupId);
             if (!group) return;
+            if (group.isLocked) {
+                alert('このグループはロックされています。配置できません。');
+                return;
+            }
 
             pushHistory();
             const isLine = group.shape === 'line';
             const ptCoords = core.coordConverter.screenPixelsToPdfPoints(clickX, clickY, group.width, group.height, isLine);
             const newInstId = core.instances.length > 0 ? Math.max(...core.instances.map(i => i.id)) + 1 : 1;
+            const groupOrders = core.instances.filter(i => i.groupId === group.id).map(i => i.order);
+            const nextOrder = groupOrders.length > 0 ? Math.max(...groupOrders) + 1 : 0;
             const newInst = Object.assign({}, InstanceModel, {
                 id: newInstId,
                 projectId: core.currentProjectId || 1,
                 groupId: group.id,
                 pageIndex: curPage,
-                order: core.instances.length,
+                order: nextOrder,
                 x: ptCoords.x,
                 y: ptCoords.y
             });
@@ -933,13 +1076,14 @@ document.addEventListener('DOMContentLoaded', async () => {
             core.selectedInstanceIds.add(newInstId);
             core.renderInteractiveLayer();
             renderGroupedAccordion();
+            updateStatusBar();
             return;
         }
 
         if (core.selectedInstanceIds.size === 1) {
             const selId = Array.from(core.selectedInstanceIds)[0];
             const selInst = core.instances.find(i => i.id === selId);
-            if (selInst && selInst.pageIndex === curPage) {
+            if (selInst && selInst.pageIndex === curPage && !isInstanceLocked(selInst)) {
                 const group = core.groups.find(g => g.id === selInst.groupId);
                 const shape = selInst.overrideShape || (group ? group.shape : 'rectangle');
                 const ptW = selInst.isSizeLocked && selInst.overrideWidth !== null ? selInst.overrideWidth : (group ? group.width : 100);
@@ -999,9 +1143,10 @@ document.addEventListener('DOMContentLoaded', async () => {
         }
 
         let hitInstance = null;
-        for (let i = core.instances.length - 1; i >= 0; i--) {
-            const inst = core.instances[i];
-            if (inst.pageIndex !== curPage || inst.isHidden) continue;
+        const paintOrder = getPaintSortedInstances(curPage);
+        for (let i = paintOrder.length - 1; i >= 0; i--) {
+            const inst = paintOrder[i];
+            if (inst.isHidden) continue;
             const group = core.groups.find(g => g.id === inst.groupId);
             if (!group || group.isHidden) continue;
 
@@ -1044,7 +1189,7 @@ document.addEventListener('DOMContentLoaded', async () => {
             dragInitialPositions.clear();
             core.selectedInstanceIds.forEach(id => {
                 const it = core.instances.find(i => i.id === id);
-                if (it && !it.isLocked) {
+                if (it && !isInstanceLocked(it)) {
                     dragInitialPositions.set(it.id, { x: it.x, y: it.y });
                 }
             });
@@ -1058,6 +1203,7 @@ document.addEventListener('DOMContentLoaded', async () => {
 
         core.renderInteractiveLayer();
         renderGroupedAccordion();
+        updateStatusBar();
     });
 
     window.addEventListener('mousemove', (e) => {
@@ -1068,7 +1214,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         if (!isDragging && core.selectedInstanceIds.size === 1) {
             const selId = Array.from(core.selectedInstanceIds)[0];
             const selInst = core.instances.find(i => i.id === selId);
-            if (selInst && selInst.pageIndex === core.currentPageNum - 1) {
+            if (selInst && selInst.pageIndex === core.currentPageNum - 1 && !isInstanceLocked(selInst)) {
                 const group = core.groups.find(g => g.id === selInst.groupId);
                 const shape = selInst.overrideShape || (group ? group.shape : 'rectangle');
                 if (shape !== 'line') {
@@ -1178,7 +1324,7 @@ document.addEventListener('DOMContentLoaded', async () => {
             core.instances.forEach(inst => {
                 if (inst.pageIndex !== curPage || inst.isHidden) return;
                 const g = core.groups.find(group => group.id === inst.groupId);
-                if (!g) return;
+                if (!g || g.isHidden) return;
                 const ptW = inst.isSizeLocked && inst.overrideWidth !== null ? inst.overrideWidth : g.width;
                 const ptH = inst.isSizeLocked && inst.overrideHeight !== null ? inst.overrideHeight : g.height;
                 const sRect = core.coordConverter.pdfPointsToScreenPixels(inst.x, inst.y, ptW, ptH, (inst.overrideShape || g.shape) === 'line');
@@ -1198,6 +1344,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         isDragging = false;
         core.renderInteractiveLayer();
         renderGroupedAccordion();
+        updateStatusBar();
     });
 
     layerCanvas.addEventListener('dblclick', () => {
@@ -1217,7 +1364,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     }
 
     function getSelectedObjects() {
-        return core.instances.filter(i => core.selectedInstanceIds.has(i.id) && !i.isLocked);
+        return core.instances.filter(i => core.selectedInstanceIds.has(i.id) && !isInstanceLocked(i));
     }
 
     function getBounds(inst) {
@@ -1339,21 +1486,80 @@ document.addEventListener('DOMContentLoaded', async () => {
         core.renderInteractiveLayer();
     });
 
+    function deleteSelectedInstances() {
+        if (core.selectedInstanceIds.size === 0) return;
+        const ids = Array.from(core.selectedInstanceIds);
+        const deletable = ids.filter(id => {
+            const inst = core.instances.find(i => i.id === id);
+            return inst && !isInstanceLocked(inst);
+        });
+        if (deletable.length === 0) return;
+        pushHistory();
+        const remove = new Set(deletable);
+        core.instances = core.instances.filter(i => !remove.has(i.id));
+        deletable.forEach(id => core.selectedInstanceIds.delete(id));
+        core.renderInteractiveLayer();
+        renderGroupedAccordion();
+        updateStatusBar();
+    }
+
+    function closeTopModalOrDeselect() {
+        if (window.getComputedStyle(helpModal).display !== 'none') {
+            helpModal.style.display = 'none';
+            return;
+        }
+        if (window.getComputedStyle(instanceModal).display !== 'none') {
+            instanceModal.style.display = 'none';
+            return;
+        }
+        if (window.getComputedStyle(dataModal).display !== 'none') {
+            dataModal.style.display = 'none';
+            return;
+        }
+        if (core.selectedInstanceIds.size > 0) {
+            core.selectedInstanceIds.clear();
+            core.renderInteractiveLayer();
+            renderGroupedAccordion();
+            updateStatusBar();
+        }
+        hideInlineGroupPanel();
+    }
+
     window.addEventListener('keydown', (e) => {
+        if (isTypingTarget(e.target)) return;
+        if (e.key === 'Escape') {
+            e.preventDefault();
+            closeTopModalOrDeselect();
+            return;
+        }
+        if (e.key === 'Delete' || e.key === 'Backspace') {
+            e.preventDefault();
+            deleteSelectedInstances();
+            return;
+        }
         if (core.selectedInstanceIds.size === 0) return;
         if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(e.key)) {
             e.preventDefault();
             const step = parseFloat(moveStepNumber.value) || 1.0;
-            pushHistory();
+            if (arrowNudgeHistoryReady) {
+                pushHistory();
+                arrowNudgeHistoryReady = false;
+            }
             core.selectedInstanceIds.forEach(id => {
                 const inst = core.instances.find(i => i.id === id);
-                if (!inst || inst.isLocked) return;
+                if (!inst || isInstanceLocked(inst)) return;
                 if (e.key === 'ArrowUp') inst.y += step;
                 if (e.key === 'ArrowDown') inst.y -= step;
                 if (e.key === 'ArrowLeft') inst.x -= step;
                 if (e.key === 'ArrowRight') inst.x += step;
             });
             core.renderInteractiveLayer();
+        }
+    });
+
+    window.addEventListener('keyup', (e) => {
+        if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(e.key)) {
+            arrowNudgeHistoryReady = true;
         }
     });
 
@@ -1383,6 +1589,10 @@ document.addEventListener('DOMContentLoaded', async () => {
 
     closeDataModal.addEventListener('click', () => dataModal.style.display = 'none');
     btnDataModalClose.addEventListener('click', () => dataModal.style.display = 'none');
+
+    btnHelp.addEventListener('click', () => { helpModal.style.display = 'flex'; });
+    closeHelpModal.addEventListener('click', () => helpModal.style.display = 'none');
+    btnHelpModalClose.addEventListener('click', () => helpModal.style.display = 'none');
 
     async function renderModalHistoryList() {
         modalProjectHistoryList.innerHTML = '';
@@ -1427,6 +1637,7 @@ document.addEventListener('DOMContentLoaded', async () => {
                             updatePageIndicator();
                             renderGroupCards();
                             renderGroupedAccordion();
+                            updateStatusBar();
                             dataModal.style.display = 'none';
                             alert(`「${item.name}」を復元しました。`);
                         }
@@ -1609,4 +1820,5 @@ document.addEventListener('DOMContentLoaded', async () => {
 
     renderGroupCards();
     renderGroupedAccordion();
+    updateStatusBar();
 });
