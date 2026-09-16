@@ -57,10 +57,17 @@ async function main() {
     const indexSrc = readFileSync(join(root, 'index.html'), 'utf8');
     assert(indexSrc.includes('id="pdf-export-mode-select"'), '出力方式セレクトがある');
     assert(indexSrc.includes('value="image"') && indexSrc.includes('value="vector"'), '画像／オブジェクトの選択肢がある');
+    assert(indexSrc.includes('番号もオブジェクト') && indexSrc.includes('番号は画像'), '番号の重ね方の文言がある');
+    assert(indexSrc.includes('下絵PDFは常にオブジェクト'), '下絵は常にオブジェクトと案内する');
     assert(appCoreSrc.includes("mode === 'vector'"), 'exportPdf が vector を分岐する');
     assert(appCoreSrc.includes('overlayImageObjects'), '画像合成経路がある');
-    assert(appCoreSrc.includes("toDataURL('image/png')"), '画像経路は PNG 合成する');
+    assert(appCoreSrc.includes('overlayNumberingPng'), '番号だけ PNG 重ねる');
+    assert(!appCoreSrc.includes('flattenPageToImage'), '下絵を全面ラスタ化しない');
+    assert(!appCoreSrc.includes('rasterizePdfPage'), '出力で pdf.js ラスタを使わない');
+    assert(appCoreSrc.includes("toDataURL('image/png')"), '番号画像経路は PNG 合成する');
     assert(appCoreSrc.includes('overlayVectorObjects'), 'オブジェクト描画経路がある');
+    assert(appCoreSrc.includes('if (this.basePdfBytes)'), '切り出しでも下絵を常に embedPdf する');
+    assert(appCoreSrc.includes('clipPageAndDrawEmbedded'), '切り出しは Form XObject をクリップ描画する');
 
     const tri = PdfNativeExport.buildTriangleSvgPath(10, 20, 100, 40);
     assert(tri.includes('M 60 60'), '三角形の頂点は上辺中央 (PDF y 上向き)');

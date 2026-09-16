@@ -1032,108 +1032,75 @@ class PdfEditorCore {
         return new Uint8Array(bytes.slice(0));
     }
 
-    async rasterizePdfPage(pageIndex, scale) {
-        if (!this.pdfDocument) return null;
-        const page = await this.pdfDocument.getPage(pageIndex + 1);
-        const baseVp = page.getViewport({ scale: 1.0 });
-        const usedScale = PdfLayoutTools.scaleToFitMaxEdge(baseVp.width, baseVp.height, scale, PdfLayoutTools.MAX_RASTER_EDGE);
-        const viewport = page.getViewport({ scale: usedScale });
-        const px = PdfLayoutTools.floorCanvasSize(viewport.width, viewport.height);
-        const canvas = document.createElement('canvas');
-        canvas.width = px.width;
-        canvas.height = px.height;
-        const ctx = canvas.getContext('2d', { willReadFrequently: false });
-        ctx.fillStyle = '#ffffff';
-        ctx.fillRect(0, 0, canvas.width, canvas.height);
-        const renderContext = { canvasContext: ctx, viewport: viewport };
-        const transform = PdfLayoutTools.canvasTransformForViewport(viewport, px.width, px.height);
-        if (transform) renderContext.transform = transform;
-        if (this.respectLayerVisibility && this.optionalContentConfig) {
-            renderContext.optionalContentConfig = this.optionalContentConfig;
-        }
-        await page.render(renderContext).promise;
-        return {
-            canvas: canvas,
-            viewport: viewport,
-            scale: usedScale,
-            pageWidth: baseVp.width,
-            pageHeight: baseVp.height
-        };
-    }
+    async overlayNumberingPng(pdfDoc, page, pageIndex, region, paper) {
+        const pageInstances = this.getSortedVisiblePageInstances(pageIndex);
+        if (!pageInstances.length) return;
 
-    async flattenPageToImage(pdfDoc, pageIdx, includeObjects) {
-        const page = pdfDoc.getPage(pageIdx);
-        const { width: ptW, height: ptH } = page.getSize();
-        const exportScale = 3.0;
-        let offCanvas;
-        let offCtx;
-        if (this.pdfDocument) {
-            const raster = await this.rasterizePdfPage(pageIdx, exportScale);
-            offCanvas = raster.canvas;
-            offCtx = offCanvas.getContext('2d');
-        } else {
-            const px = PdfLayoutTools.floorCanvasSize(ptW * exportScale, ptH * exportScale);
-            offCanvas = document.createElement('canvas');
-            offCanvas.width = px.width;
-            offCanvas.height = px.height;
-            offCtx = offCanvas.getContext('2d');
-            offCtx.fillStyle = '#ffffff';
-            offCtx.fillRect(0, 0, offCanvas.width, offCanvas.height);
-        }
-        if (includeObjects) {
-            const exportConverter = new CoordinateConverter();
-            exportConverter.setPageContext(ptW, ptH, null);
-            exportConverter.setZoom(offCanvas.width / ptW);
-            const pageInstances = this.getSortedVisiblePageInstances(pageIdx);
-            for (const instance of pageInstances) {
-                const group = this.groups.find(g => g.id === instance.groupId);
-                if (!group || group.isHidden) continue;
-                this.drawInstance(instance, group, offCtx, exportConverter, true);
+        const srcW = region
+            ? (this.coordConverter.pageWidthPoints || paper.width)
+            : page.getSize().width;
+        const srcH = region
+            ? (this.coordConverter.pageHeightPoints || paper.height)
+            : page.getSize().height;
+        const destW = region ? paper.width : srcW;
+        const destH = region ? paper.height : srcH;
+
+        const requestedScale = 3.0;
+        const usedScale = PdfLayoutTools.scaleToFitMaxEdge(srcW, srcH, requestedScale, PdfLayoutTools.MAX_RASTER_EDGE);
+        const px = PdfLayoutTools.floorCanvasSize(srcW * usedScale, srcH * usedScale);
+        const offCanvas = document.createElement('canvas');
+        offCanvas.width = px.width;
+        offCanvas.height = px.height;
+        const offCtx = offCanvas.getContext('2d');
+        offCtx.clearRect(0, 0, offCanvas.width, offCanvas.height);
+
+        const exportConverter = new CoordinateConverter();
+        exportConverter.setPageContext(srcW, srcH, null);
+        exportConverter.setZoom(offCanvas.width / srcW);
+
+        for (const instance of pageInstances) {
+            const group = this.groups.find(g => g.id === instance.groupId);
+            if (!group || group.isHidden) continue;
+            if (region) {
+                const style = this.getInstanceStyle(instance, group);
+                if (!PdfLayoutTools.rectsIntersect(PdfLayoutTools.instanceBounds(instance, style), region)) continue;
             }
+            this.drawInstance(instance, group, offCtx, exportConverter, true);
         }
-        const pngImage = await pdfDoc.embedPng(offCanvas.toDataURL('image/png'));
-        page.drawImage(pngImage, { x: 0, y: 0, width: ptW, height: ptH });
+
+        let pngCanvas = offCanvas;
+        if (region) {
+            const pixelScale = offCanvas.width / srcW;
+            const srcRect = PdfLayoutTools.clampDrawImageSource(
+                region.x * pixelScale,
+                (srcH - region.y - region.height) * pixelScale,
+                region.width * pixelScale,
+                region.height * pixelScale,
+                offCanvas.width,
+                offCanvas.height
+            );
+            const dest = document.createElement('canvas');
+            const destPx = PdfLayoutTools.floorCanvasSize(destW * 2, destH * 2);
+            dest.width = destPx.width;
+            dest.height = destPx.height;
+            if (srcRect.valid) {
+                dest.getContext('2d').drawImage(
+                    offCanvas,
+                    srcRect.sx, srcRect.sy, srcRect.sw, srcRect.sh,
+                    0, 0, dest.width, dest.height
+                );
+            }
+            pngCanvas = dest;
+        }
+
+        // 番号オブジェクトだけ透過 PNG。下絵は呼び出し側が Form XObject として残す。
+        const pngImage = await pdfDoc.embedPng(pngCanvas.toDataURL('image/png'));
+        page.drawImage(pngImage, { x: 0, y: 0, width: destW, height: destH });
     }
 
     async overlayImageObjects(pdfDoc, totalPages) {
-        if (this.respectLayerVisibility && this.pdfDocument) {
-            for (let pageIdx = 0; pageIdx < totalPages; pageIdx++) {
-                await this.flattenPageToImage(pdfDoc, pageIdx, true);
-            }
-            return;
-        }
-        const exportScale = 3.0;
         for (let pageIdx = 0; pageIdx < totalPages; pageIdx++) {
-            const pageInstances = this.getSortedVisiblePageInstances(pageIdx);
-            if (pageInstances.length === 0) continue;
-
-            const page = pdfDoc.getPage(pageIdx);
-            const { width: ptW, height: ptH } = page.getSize();
-
-            const offCanvas = document.createElement('canvas');
-            const px = PdfLayoutTools.floorCanvasSize(ptW * exportScale, ptH * exportScale);
-            offCanvas.width = px.width;
-            offCanvas.height = px.height;
-            const offCtx = offCanvas.getContext('2d');
-
-            const exportConverter = new CoordinateConverter();
-            exportConverter.setPageContext(ptW, ptH, null);
-            exportConverter.setZoom(offCanvas.width / ptW);
-
-            for (const instance of pageInstances) {
-                const group = this.groups.find(g => g.id === instance.groupId);
-                if (!group || group.isHidden) continue;
-                this.drawInstance(instance, group, offCtx, exportConverter, true);
-            }
-
-            const pngDataUrl = offCanvas.toDataURL('image/png');
-            const pngImage = await pdfDoc.embedPng(pngDataUrl);
-            page.drawImage(pngImage, {
-                x: 0,
-                y: 0,
-                width: ptW,
-                height: ptH,
-            });
+            await this.overlayNumberingPng(pdfDoc, pdfDoc.getPage(pageIdx), pageIdx, null, null);
         }
     }
 
@@ -1156,7 +1123,7 @@ class PdfEditorCore {
         const outDoc = await PDFDocument.create();
         let srcDoc = null;
         let embeddedPages = [];
-        if (this.basePdfBytes && exportMode === 'vector') {
+        if (this.basePdfBytes) {
             srcDoc = await PDFDocument.load(this.getCleanPdfBytes(), { ignoreEncryption: true });
             if (this.respectLayerVisibility) {
                 PdfLayoutTools.applyOcgVisibility(srcDoc, this.layerVisibilityByName);
@@ -1188,71 +1155,12 @@ class PdfEditorCore {
             const region = this.cropRegions[i];
             const paper = PdfLayoutTools.getPaperSize(region.paperKey, region.landscape);
             const page = outDoc.addPage([paper.width, paper.height]);
+            const emb = embeddedPages[region.pageIndex];
+            if (emb) {
+                PdfLayoutTools.clipPageAndDrawEmbedded(page, emb, region, paper, PDFLib);
+            }
 
-            if (exportMode === 'image' || !this.pdfDocument) {
-                const requestedScale = Math.max(2, (paper.width / Math.max(region.width, 1)) * 2);
-                let srcCanvas;
-                let srcW;
-                let srcH;
-                let usedScale = requestedScale;
-                if (this.pdfDocument) {
-                    const raster = await this.rasterizePdfPage(region.pageIndex, requestedScale);
-                    srcCanvas = raster.canvas;
-                    srcW = raster.pageWidth;
-                    srcH = raster.pageHeight;
-                    usedScale = raster.scale || (srcCanvas.width / srcW);
-                } else {
-                    srcW = this.coordConverter.pageWidthPoints || 595.28;
-                    srcH = this.coordConverter.pageHeightPoints || 841.89;
-                    usedScale = PdfLayoutTools.scaleToFitMaxEdge(srcW, srcH, requestedScale, PdfLayoutTools.MAX_RASTER_EDGE);
-                    const px = PdfLayoutTools.floorCanvasSize(srcW * usedScale, srcH * usedScale);
-                    srcCanvas = document.createElement('canvas');
-                    srcCanvas.width = px.width;
-                    srcCanvas.height = px.height;
-                    const fill = srcCanvas.getContext('2d');
-                    fill.fillStyle = '#ffffff';
-                    fill.fillRect(0, 0, srcCanvas.width, srcCanvas.height);
-                }
-                const pixelScale = srcCanvas.width / srcW;
-                const exportConverter = new CoordinateConverter();
-                exportConverter.setPageContext(srcW, srcH, null);
-                exportConverter.setZoom(pixelScale);
-                const ctx = srcCanvas.getContext('2d');
-                const pageInstances = this.getSortedVisiblePageInstances(region.pageIndex);
-                for (const instance of pageInstances) {
-                    const group = this.groups.find(g => g.id === instance.groupId);
-                    if (!group || group.isHidden) continue;
-                    this.drawInstance(instance, group, ctx, exportConverter, true);
-                }
-                const srcRect = PdfLayoutTools.clampDrawImageSource(
-                    region.x * pixelScale,
-                    (srcH - region.y - region.height) * pixelScale,
-                    region.width * pixelScale,
-                    region.height * pixelScale,
-                    srcCanvas.width,
-                    srcCanvas.height
-                );
-                const dest = document.createElement('canvas');
-                const destPx = PdfLayoutTools.floorCanvasSize(paper.width * 2, paper.height * 2);
-                dest.width = destPx.width;
-                dest.height = destPx.height;
-                const destCtx = dest.getContext('2d');
-                destCtx.fillStyle = '#ffffff';
-                destCtx.fillRect(0, 0, dest.width, dest.height);
-                if (srcRect.valid) {
-                    destCtx.drawImage(
-                        srcCanvas,
-                        srcRect.sx, srcRect.sy, srcRect.sw, srcRect.sh,
-                        0, 0, dest.width, dest.height
-                    );
-                }
-                const pngImage = await outDoc.embedPng(dest.toDataURL('image/png'));
-                page.drawImage(pngImage, { x: 0, y: 0, width: paper.width, height: paper.height });
-            } else {
-                const emb = embeddedPages[region.pageIndex];
-                if (emb) {
-                    PdfLayoutTools.clipPageAndDrawEmbedded(page, emb, region, paper, PDFLib);
-                }
+            if (exportMode === 'vector') {
                 const pageInstances = this.getSortedVisiblePageInstances(region.pageIndex);
                 for (const instance of pageInstances) {
                     const group = this.groups.find(g => g.id === instance.groupId);
@@ -1263,6 +1171,8 @@ class PdfEditorCore {
                     const displayText = this.resolveAutoText(style.rawText, instance, group);
                     PdfNativeExport.drawInstanceOnPage(page, mapped.instance, mapped.style, displayText, vectorFont);
                 }
+            } else {
+                await this.overlayNumberingPng(outDoc, page, region.pageIndex, region, paper);
             }
         }
 
