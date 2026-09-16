@@ -5,14 +5,8 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>PDF配置ツール</title>
     <link rel="stylesheet" href="style.css">
-    <script>
-        if (location.protocol === 'file:') document.documentElement.classList.add('is-file-origin');
-    </script>
 </head>
 <body>
-    <p id="file-origin-banner" class="file-origin-banner">
-        Edge でこの HTML を直接開くと「file: URLs are treated as unique security origins」と出ます。同じフォルダの <strong>起動.bat</strong> をダブルクリックして http で開いてください。
-    </p>
     <div id="app-container" class="workspace-place">
         <header id="app-header">
             <div class="header-row file-row">
@@ -621,7 +615,7 @@
                         <li>配置画面: 左の「新規」でグループを作り、「登録」でオブジェクトを置く。</li>
                         <li>切り抜き・レイヤー画面: 帳票枠の追加／移動と PDF レイヤーの表示切替。</li>
                         <li>「保存」でブラウザにバージョン保存。「PDF出力」で完成稿を書き出す。</li>
-                        <li>ZIP は解凍し、同じフォルダの <code>起動.bat</code> をダブルクリックする（Edge で HTML を直接開くと file:// 警告が出る）。</li>
+                        <li>ZIP は解凍し、フォルダ内の <code>index.html</code> をダブルクリックして開く。</li>
                     </ol>
                 </details>
 
@@ -660,20 +654,14 @@
     <script src="./vendor/Sortable.min.js"></script>
     <script>
         (function () {
-            if (location.protocol === 'file:') {
-                document.documentElement.classList.add('is-file-origin');
-                document.body.classList.add('is-file-origin');
-            }
             if (typeof pdfjsLib === 'undefined') return;
             pdfjsLib.GlobalWorkerOptions.workerSrc = './vendor/pdf.worker.min.js';
             if (location.protocol !== 'file:') return;
-            // file:// は origin が null のため Worker が同一 HTML をフレーム扱いで読み、Chromium が拒否する
-            var NativeWorker = window.Worker;
-            if (typeof NativeWorker !== 'function') return;
-            window.Worker = function (url, opts) {
-                throw new Error('file-origin-worker-disabled');
+            if (!pdfjsLib.PDFWorker || !pdfjsLib.PDFWorker.prototype) return;
+            // file:// では Worker / IndexedDB のフレーム読み込みを避ける
+            pdfjsLib.PDFWorker.prototype._initialize = function () {
+                this._setupFakeWorker();
             };
-            window.Worker.prototype = NativeWorker.prototype;
         })();
     </script>
     <script src="./EditorModels.js"></script>

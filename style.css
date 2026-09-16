@@ -43,17 +43,6 @@ body, html {
     padding: 8px 12px;
 }
 .file-row { border-bottom: 1px solid #e2e8f0; background: #f8fafc; }
-.file-origin-banner {
-    display: none;
-    margin: 0;
-    padding: 8px 12px;
-    background: #fff7ed;
-    color: #9a3412;
-    font-size: 12px;
-    border-bottom: 1px solid #fed7aa;
-}
-body.is-file-origin .file-origin-banner,
-html.is-file-origin .file-origin-banner { display: block; }
 .edit-row { background: #ffffff; }
 .range-row { background: #fff7ed; border-top: 1px solid #fed7aa; }
 
