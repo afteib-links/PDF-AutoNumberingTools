@@ -412,13 +412,19 @@ body, html {
     margin: 0 auto;
     transform-origin: top left;
     flex: 0 0 auto;
+    overflow: hidden;
+    min-width: 40px;
+    min-height: 40px;
 }
-/* 下絵は画面外バッファ。表示は重ねキャンバス（流れに乗せてラッパーサイズを確保） */
+/* 下絵は 1px クリップのバッファ。画面外配置だと親が横スクロールしてプレビューが消える */
 #pdf-render-canvas {
     position: absolute;
-    left: -10000px;
+    left: 0;
     top: 0;
+    width: 1px;
+    height: 1px;
     pointer-events: none;
+    opacity: 0;
     z-index: 0;
 }
 #interactive-layer-canvas {
@@ -2905,8 +2911,6 @@ class PdfEditorCore {
                     const viewportH = 842 * this.coordConverter.zoomLevel;
                     this.pdfCanvas.width = viewportW;
                     this.pdfCanvas.height = viewportH;
-                    this.pdfCanvas.style.width = `${viewportW}px`;
-                    this.pdfCanvas.style.height = `${viewportH}px`;
                     this.pdfCtx.fillStyle = "#ffffff";
                     this.pdfCtx.fillRect(0, 0, viewportW, viewportH);
                     this.layerCanvas.width = viewportW;
@@ -2954,8 +2958,6 @@ class PdfEditorCore {
             const px = PdfLayoutTools.floorCanvasSize(viewport.width, viewport.height);
             this.pdfCanvas.width = px.width;
             this.pdfCanvas.height = px.height;
-            this.pdfCanvas.style.width = `${viewport.width}px`;
-            this.pdfCanvas.style.height = `${viewport.height}px`;
             this.layerCanvas.width = px.width;
             this.layerCanvas.height = px.height;
             this.layerCanvas.style.width = `${viewport.width}px`;
@@ -3000,8 +3002,6 @@ class PdfEditorCore {
             const viewportH = 842 * this.coordConverter.zoomLevel;
             this.pdfCanvas.width = viewportW;
             this.pdfCanvas.height = viewportH;
-            this.pdfCanvas.style.width = `${viewportW}px`;
-            this.pdfCanvas.style.height = `${viewportH}px`;
             this.pdfCtx.fillStyle = "#ffffff";
             this.pdfCtx.fillRect(0, 0, viewportW, viewportH);
             this.layerCanvas.width = viewportW;

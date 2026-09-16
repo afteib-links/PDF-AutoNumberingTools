@@ -275,8 +275,6 @@ class PdfEditorCore {
                     const viewportH = 842 * this.coordConverter.zoomLevel;
                     this.pdfCanvas.width = viewportW;
                     this.pdfCanvas.height = viewportH;
-                    this.pdfCanvas.style.width = `${viewportW}px`;
-                    this.pdfCanvas.style.height = `${viewportH}px`;
                     this.pdfCtx.fillStyle = "#ffffff";
                     this.pdfCtx.fillRect(0, 0, viewportW, viewportH);
                     this.layerCanvas.width = viewportW;
@@ -324,8 +322,6 @@ class PdfEditorCore {
             const px = PdfLayoutTools.floorCanvasSize(viewport.width, viewport.height);
             this.pdfCanvas.width = px.width;
             this.pdfCanvas.height = px.height;
-            this.pdfCanvas.style.width = `${viewport.width}px`;
-            this.pdfCanvas.style.height = `${viewport.height}px`;
             this.layerCanvas.width = px.width;
             this.layerCanvas.height = px.height;
             this.layerCanvas.style.width = `${viewport.width}px`;
@@ -370,8 +366,6 @@ class PdfEditorCore {
             const viewportH = 842 * this.coordConverter.zoomLevel;
             this.pdfCanvas.width = viewportW;
             this.pdfCanvas.height = viewportH;
-            this.pdfCanvas.style.width = `${viewportW}px`;
-            this.pdfCanvas.style.height = `${viewportH}px`;
             this.pdfCtx.fillStyle = "#ffffff";
             this.pdfCtx.fillRect(0, 0, viewportW, viewportH);
             this.layerCanvas.width = viewportW;
