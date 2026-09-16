@@ -106,7 +106,8 @@ async function main() {
         }
     }
     const decoded = parts.join('\n');
-    assert(decoded.includes('SRC') || raw.includes('SRC'), '元ページのテキストが切り出し後も残る');
+    assert(/<535243>/.test(decoded), '元ページのテキスト（SRC）が Form 内に残る');
+    assert(/EmbeddedPdfPage-\d+ Do/.test(decoded), '切り出しページは埋め込みページを Do で描画する');
 
     const srcClamp = PdfLayoutTools.clampDrawImageSource(-10, -5, 40, 20, 100, 80);
     assert(srcClamp.sx === 0 && srcClamp.sy === 0, '負の切り出し原点を 0 にクランプ');
