@@ -44,7 +44,8 @@ class PdfEditorCore {
             await this.db.open(); 
         } catch (error) { 
             console.error("DB初期化失敗:", error); 
-        } 
+        }
+        await this.setZoom(this.coordConverter.zoomLevel || 1.0);
     }
 
     pdfJsDocumentOptions(data) {
