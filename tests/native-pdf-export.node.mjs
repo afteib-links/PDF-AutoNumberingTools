@@ -54,10 +54,13 @@ function decodePdfStreams(raw) {
 async function main() {
     const appCoreSrc = readFileSync(join(root, 'AppCore.js'), 'utf8');
     const indexSrc = readFileSync(join(root, 'index.html'), 'utf8');
-    assert(indexSrc.includes('src="./vendor/pdf-lib.min.js"'), 'pdf-lib は同梱');
-    assert(indexSrc.includes('src="./vendor/pdf.worker.min.js"'), 'pdf.worker は同梱');
-    assert(!indexSrc.includes('unpkg.com'), 'ページ読込で unpkg を使わない');
-    assert(indexSrc.includes('_setupFakeWorker'), 'file:// では pdf.js をメインスレッドで動かす');
+    const indexDevSrc = readFileSync(join(root, 'index.dev.html'), 'utf8');
+    assert(indexSrc.includes('standalone-file-origin'), '配布用 index.html は単一ファイル');
+    assert(!indexSrc.includes('<script src="./vendor/pdf-lib.min.js">'), '配布用は pdf-lib をインライン化');
+    assert(!indexSrc.includes('<script src="./AppCore.js">'), '配布用は AppCore をインライン化');
+    assert(indexSrc.includes('createMemoryDatabase'), 'file:// 用メモリDBが入っている');
+    assert(indexSrc.includes('_setupFakeWorker'), 'pdf.js はメインスレッドで動かす');
+    assert(indexDevSrc.includes('src="./vendor/pdf-lib.min.js"'), '開発用 HTML は分割読み込み');
     assert(indexSrc.includes('id="pdf-export-mode-select"'), '出力方式セレクトがある');
     assert(indexSrc.includes('value="image"') && indexSrc.includes('value="vector"'), '画像／オブジェクトの選択肢がある');
     assert(indexSrc.includes('番号もオブジェクト') && indexSrc.includes('番号は画像'), '番号の重ね方の文言がある');

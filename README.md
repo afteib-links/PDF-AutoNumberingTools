@@ -4,7 +4,7 @@ PDFを下絵にして、グループで決めたオブジェクトを配置し�
 
 ## 起動
 
-ZIP を解凍し、フォルダ内の `index.html` をダブルクリックして開きます。ライブラリは `vendor/` に同梱しています。`file://` では Worker と IndexedDB を使わず、同じフォルダのまま動作します。CJK 用 CMap と出力時の Noto Sans JP だけ、必要時に CDN から取得します。
+ZIP を解凍し、`index.html` をダブルクリックして開きます（単一ファイルに CSS/JS をまとめてあるので、このファイルだけでも開けます）。編集する場合は `index.dev.html` と各 `.js` を直し、`node tools/pack-standalone.mjs` で `index.html` を再生成します。CJK 用 CMap と出力時の Noto Sans JP だけ、必要時に CDN から取得します。
 
 ## 出力の検証（Node）
 
@@ -118,7 +118,10 @@ node tests/layout-tools.node.mjs
 
 ## ファイル構成
 
-- `index.html` / `style.css`: 画面
+- `index.dev.html`: 画面の元ファイル（開発用）
+- `index.html`: ダブルクリック用（CSS/JS をインライン化した単一ファイル）
+- `tools/pack-standalone.mjs`: `index.html` の生成
+- `style.css`: 画面
 - `main.js`: UI 操作
 - `AppCore.js`: PDF 描画・保存・出力
 - `PdfNativeExport.js`: PDF へのパス／テキスト描画と Noto Sans JP 埋め込み
