@@ -3,7 +3,7 @@
  */
 import { createRequire } from 'node:module';
 import { inflateSync } from 'node:zlib';
-import { writeFileSync } from 'node:fs';
+import { writeFileSync, readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -52,12 +52,12 @@ function decodePdfStreams(raw) {
 }
 
 async function main() {
-    const { readFileSync } = await import('node:fs');
     const appCoreSrc = readFileSync(join(root, 'AppCore.js'), 'utf8');
     const indexSrc = readFileSync(join(root, 'index.html'), 'utf8');
     assert(indexSrc.includes('src="./vendor/pdf-lib.min.js"'), 'pdf-lib は同梱');
     assert(indexSrc.includes('src="./vendor/pdf.worker.min.js"'), 'pdf.worker は同梱');
     assert(!indexSrc.includes('unpkg.com'), 'ページ読込で unpkg を使わない');
+    assert(indexSrc.includes('_setupFakeWorker'), 'file:// では pdf.js をメインスレッドで動かす');
     assert(indexSrc.includes('id="pdf-export-mode-select"'), '出力方式セレクトがある');
     assert(indexSrc.includes('value="image"') && indexSrc.includes('value="vector"'), '画像／オブジェクトの選択肢がある');
     assert(indexSrc.includes('番号もオブジェクト') && indexSrc.includes('番号は画像'), '番号の重ね方の文言がある');
@@ -71,6 +71,8 @@ async function main() {
     assert(appCoreSrc.includes('overlayVectorObjects'), 'オブジェクト描画経路がある');
     assert(appCoreSrc.includes('if (this.basePdfBytes)'), '切り出しでも下絵を常に embedPdf する');
     assert(appCoreSrc.includes('clipPageAndDrawEmbedded'), '切り出しは Form XObject をクリップ描画する');
+    const dbSrc = readFileSync(join(root, 'DBManager.js'), 'utf8');
+    assert(dbSrc.includes('createMemoryDatabase'), 'file:// ではメモリDBを使う');
 
     const tri = PdfNativeExport.buildTriangleSvgPath(10, 20, 100, 40);
     assert(tri.includes('M 60 60'), '三角形の頂点は上辺中央 (PDF y 上向き)');

@@ -47,6 +47,20 @@ class PdfEditorCore {
         } 
     }
 
+    pdfJsDocumentOptions(data) {
+        const opts = {
+            data: data,
+            cMapUrl: 'https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/cmaps/',
+            cMapPacked: true
+        };
+        if (typeof location !== 'undefined' && location.protocol === 'file:') {
+            opts.disableRange = true;
+            opts.disableStream = true;
+            opts.disableAutoFetch = true;
+        }
+        return opts;
+    }
+
     async loadPdfFile(file) {
         try {
             const arrayBuffer = await file.arrayBuffer();
@@ -55,11 +69,7 @@ class PdfEditorCore {
             this.currentPdfPath = file.webkitRelativePath || file.name;
 
             const pdfjsData = new Uint8Array(arrayBuffer.slice(0));
-            const loadingTask = pdfjsLib.getDocument({ 
-                data: pdfjsData,
-                cMapUrl: 'https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/cmaps/',
-                cMapPacked: true
-            });
+            const loadingTask = pdfjsLib.getDocument(this.pdfJsDocumentOptions(pdfjsData));
             
             this.pdfDocument = await loadingTask.promise;
             this.totalPageNum = this.pdfDocument.numPages;
@@ -87,11 +97,7 @@ class PdfEditorCore {
             this.currentPdfPath = file.webkitRelativePath || file.name;
 
             const pdfjsData = new Uint8Array(arrayBuffer.slice(0));
-            const loadingTask = pdfjsLib.getDocument({ 
-                data: pdfjsData,
-                cMapUrl: 'https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/cmaps/',
-                cMapPacked: true
-            });
+            const loadingTask = pdfjsLib.getDocument(this.pdfJsDocumentOptions(pdfjsData));
             this.pdfDocument = await loadingTask.promise;
             this.totalPageNum = this.pdfDocument.numPages;
             if (this.currentPageNum > this.totalPageNum) this.currentPageNum = 1;
@@ -250,11 +256,7 @@ class PdfEditorCore {
                         : new Uint8Array(blobRecord.pdfBytes);
                     this.basePdfBytes = new Uint8Array(rawBytes.slice(0));
                     const pdfjsData = new Uint8Array(this.basePdfBytes.slice(0));
-                    const loadingTask = pdfjsLib.getDocument({ 
-                        data: pdfjsData,
-                        cMapUrl: 'https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/cmaps/',
-                        cMapPacked: true
-                    });
+                    const loadingTask = pdfjsLib.getDocument(this.pdfJsDocumentOptions(pdfjsData));
                     this.pdfDocument = await loadingTask.promise;
                     this.totalPageNum = this.pdfDocument.numPages;
                     await this.refreshPdfLayers();

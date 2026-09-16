@@ -615,7 +615,7 @@
                         <li>配置画面: 左の「新規」でグループを作り、「登録」でオブジェクトを置く。</li>
                         <li>切り抜き・レイヤー画面: 帳票枠の追加／移動と PDF レイヤーの表示切替。</li>
                         <li>「保存」でブラウザにバージョン保存。「PDF出力」で完成稿を書き出す。</li>
-                        <li>ZIP は解凍して <code>index.html</code> を開く（フォルダごと使う）。Edge で <code>file://</code> から開いても、ライブラリは同梱ファイルを使う。</li>
+                        <li>ZIP は解凍し、フォルダ内の <code>index.html</code> をダブルクリックして開く。</li>
                     </ol>
                 </details>
 
@@ -653,9 +653,16 @@
     <script src="./vendor/pdf.worker.min.js"></script>
     <script src="./vendor/Sortable.min.js"></script>
     <script>
-        if (typeof pdfjsLib !== 'undefined') {
+        (function () {
+            if (typeof pdfjsLib === 'undefined') return;
             pdfjsLib.GlobalWorkerOptions.workerSrc = './vendor/pdf.worker.min.js';
-        }
+            if (location.protocol !== 'file:') return;
+            if (!pdfjsLib.PDFWorker || !pdfjsLib.PDFWorker.prototype) return;
+            // file:// では Worker / IndexedDB のフレーム読み込みを避ける
+            pdfjsLib.PDFWorker.prototype._initialize = function () {
+                this._setupFakeWorker();
+            };
+        })();
     </script>
     <script src="./EditorModels.js"></script>
     <script src="./DBManager.js"></script>
