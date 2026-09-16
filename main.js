@@ -1490,6 +1490,7 @@ document.addEventListener('DOMContentLoaded', async () => {
             layerCanvas.style.cursor = currentMode === 'draw' ? 'crosshair' : 'default';
             return;
         }
+        const deltaScreenX = currentX - dragStartMouse.x;
         const deltaScreenY = currentY - dragStartMouse.y;
         const deltaPtX = deltaScreenX / (core.coordConverter.zoomLevel * core.coordConverter.ptToPxRatio);
         const deltaPtY = -deltaScreenY / (core.coordConverter.zoomLevel * core.coordConverter.ptToPxRatio);

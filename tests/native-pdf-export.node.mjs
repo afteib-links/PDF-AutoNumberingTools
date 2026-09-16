@@ -82,6 +82,8 @@ async function main() {
     assert(appCoreSrc.includes('drawImage(this.pdfCanvas'), '重ねキャンバスに下絵をコピーする');
     const dbSrc = readFileSync(join(root, 'DBManager.js'), 'utf8');
     assert(dbSrc.includes('createMemoryDatabase'), 'file:// ではメモリDBを使う');
+    const mainSrc = readFileSync(join(root, 'main.js'), 'utf8');
+    assert(mainSrc.includes('const deltaScreenX = currentX - dragStartMouse.x'), 'ドラッグ移動に deltaScreenX がある');
 
     const tri = PdfNativeExport.buildTriangleSvgPath(10, 20, 100, 40);
     assert(tri.includes('M 60 60'), '三角形の頂点は上辺中央 (PDF y 上向き)');
