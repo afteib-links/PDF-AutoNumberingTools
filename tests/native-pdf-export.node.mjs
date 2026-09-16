@@ -55,6 +55,9 @@ async function main() {
     const { readFileSync } = await import('node:fs');
     const appCoreSrc = readFileSync(join(root, 'AppCore.js'), 'utf8');
     const indexSrc = readFileSync(join(root, 'index.html'), 'utf8');
+    assert(indexSrc.includes('src="./vendor/pdf-lib.min.js"'), 'pdf-lib は同梱');
+    assert(indexSrc.includes('src="./vendor/pdf.worker.min.js"'), 'pdf.worker は同梱');
+    assert(!indexSrc.includes('unpkg.com'), 'ページ読込で unpkg を使わない');
     assert(indexSrc.includes('id="pdf-export-mode-select"'), '出力方式セレクトがある');
     assert(indexSrc.includes('value="image"') && indexSrc.includes('value="vector"'), '画像／オブジェクトの選択肢がある');
     assert(indexSrc.includes('番号もオブジェクト') && indexSrc.includes('番号は画像'), '番号の重ね方の文言がある');

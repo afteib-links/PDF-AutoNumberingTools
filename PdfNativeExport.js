@@ -24,7 +24,7 @@
     function getFontkit() {
         const fk = (typeof fontkit !== 'undefined') ? fontkit : (root && root.fontkit);
         if (!fk) {
-            throw new Error('fontkit が読み込まれていません。CDN の読み込みを確認してください。');
+            throw new Error('fontkit が読み込まれていません。vendor/fontkit.umd.min.js の読み込みを確認してください。');
         }
         return fk;
     }
