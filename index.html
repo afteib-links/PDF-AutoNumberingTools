@@ -615,6 +615,7 @@
                         <li>配置画面: 左の「新規」でグループを作り、「登録」でオブジェクトを置く。</li>
                         <li>切り抜き・レイヤー画面: 帳票枠の追加／移動と PDF レイヤーの表示切替。</li>
                         <li>「保存」でブラウザにバージョン保存。「PDF出力」で完成稿を書き出す。</li>
+                        <li>ZIP は解凍して <code>index.html</code> を開く（フォルダごと使う）。Edge で <code>file://</code> から開いても、ライブラリは同梱ファイルを使う。</li>
                     </ol>
                 </details>
 
@@ -646,13 +647,14 @@
         </div>
     </div>
 
-    <script src="https://unpkg.com/pdf-lib@1.17.1/dist/pdf-lib.min.js"></script>
-    <script src="https://unpkg.com/@pdf-lib/fontkit@1.1.1/dist/fontkit.umd.min.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.2/Sortable.min.js"></script>
+    <script src="./vendor/pdf-lib.min.js"></script>
+    <script src="./vendor/fontkit.umd.min.js"></script>
+    <script src="./vendor/pdf.min.js"></script>
+    <script src="./vendor/pdf.worker.min.js"></script>
+    <script src="./vendor/Sortable.min.js"></script>
     <script>
         if (typeof pdfjsLib !== 'undefined') {
-            pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+            pdfjsLib.GlobalWorkerOptions.workerSrc = './vendor/pdf.worker.min.js';
         }
     </script>
     <script src="./EditorModels.js"></script>

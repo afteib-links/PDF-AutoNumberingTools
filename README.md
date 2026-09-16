@@ -4,7 +4,7 @@ PDFを下絵にして、グループで決めたオブジェクトを配置し�
 
 ## 起動
 
-`index.html` をブラウザで開きます。外部ライブラリは CDN から読み込みます。
+ZIP を解凍し、フォルダ内の `index.html` をブラウザで開きます。pdf-lib / pdf.js / Sortable は `vendor/` に同梱しているので、`file://` でも Edge のトラッキング防止でストレージが遮断されません。CJK 用 CMap と出力時の Noto Sans JP だけ、必要時に CDN から取得します。
 
 ## 出力の検証（Node）
 
@@ -124,4 +124,4 @@ node tests/layout-tools.node.mjs
 - `PdfNativeExport.js`: PDF へのパス／テキスト描画と Noto Sans JP 埋め込み
 - `EditorModels.js`: データ形
 - `DBManager.js`: IndexedDB
-- `CoordinateConverter.js`: PDF 座標と画面座標
+- `vendor/`: pdf-lib / pdf.js / Sortable（`file://` でも動かすため同梱）
