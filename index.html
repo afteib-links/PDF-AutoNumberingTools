@@ -405,14 +405,29 @@ body, html {
 }
 #canvas-wrapper {
     position: relative;
+    display: inline-block;
+    line-height: 0;
     box-shadow: 0 8px 24px rgba(0, 0, 0, 0.28);
     background-color: white;
-    margin: auto;
+    margin: 0 auto;
     transform-origin: top left;
+    flex: 0 0 auto;
 }
-#pdf-render-canvas, #interactive-layer-canvas { display: block; position: absolute; top: 0; left: 0; }
-#pdf-render-canvas { z-index: 1; }
-#interactive-layer-canvas { z-index: 2; cursor: default; }
+/* 下絵は画面外バッファ。表示は重ねキャンバス（流れに乗せてラッパーサイズを確保） */
+#pdf-render-canvas {
+    position: absolute;
+    left: -10000px;
+    top: 0;
+    pointer-events: none;
+    z-index: 0;
+}
+#interactive-layer-canvas {
+    display: block;
+    position: relative;
+    z-index: 2;
+    cursor: default;
+    background-color: #ffffff;
+}
 
 .move-step-panel {
     margin-top: 8px;
@@ -2642,9 +2657,9 @@ class PdfEditorCore {
         this.workspace = 'place';
 
         this.pdfCanvas = document.getElementById('pdf-render-canvas');
-        this.pdfCtx = this.pdfCanvas.getContext('2d');
+        this.pdfCtx = this.pdfCanvas.getContext('2d', { alpha: false, willReadFrequently: true });
         this.layerCanvas = document.getElementById('interactive-layer-canvas');
-        this.layerCtx = this.layerCanvas.getContext('2d');
+        this.layerCtx = this.layerCanvas.getContext('2d', { alpha: false });
         this.canvasWrapper = document.getElementById('canvas-wrapper');
 
         this.currentRenderTask = null;    
@@ -3135,7 +3150,23 @@ class PdfEditorCore {
     }
 
     renderInteractiveLayer() {
-        this.layerCtx.clearRect(0, 0, this.layerCanvas.width, this.layerCanvas.height);
+        const w = this.layerCanvas.width;
+        const h = this.layerCanvas.height;
+        this.layerCtx.setTransform(1, 0, 0, 1, 0, 0);
+        this.layerCtx.globalCompositeOperation = 'copy';
+        // 下絵キャンバスは非表示バッファ。表示面へ不透明コピーしてからオブジェクトを描く
+        if (this.pdfCanvas && this.pdfCanvas.width > 0 && this.pdfCanvas.height > 0) {
+            try {
+                this.layerCtx.drawImage(this.pdfCanvas, 0, 0, w, h);
+            } catch (e) {
+                this.layerCtx.fillStyle = '#ffffff';
+                this.layerCtx.fillRect(0, 0, w, h);
+            }
+        } else {
+            this.layerCtx.fillStyle = '#ffffff';
+            this.layerCtx.fillRect(0, 0, w, h);
+        }
+        this.layerCtx.globalCompositeOperation = 'source-over';
 
         this.buildAutoTextIndexMap();
 

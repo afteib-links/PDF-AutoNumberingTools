@@ -53,8 +53,11 @@ function decodePdfStreams(raw) {
 
 async function main() {
     const appCoreSrc = readFileSync(join(root, 'AppCore.js'), 'utf8');
+    const styleSrc = readFileSync(join(root, 'style.css'), 'utf8');
     const indexSrc = readFileSync(join(root, 'index.html'), 'utf8');
     const indexDevSrc = readFileSync(join(root, 'index.dev.html'), 'utf8');
+    assert(/#interactive-layer-canvas \{[\s\S]*?position:\s*relative/.test(styleSrc), '表示キャンバスは流れの中でサイズを持つ');
+    assert(/#pdf-render-canvas \{[\s\S]*?left:\s*-10000px/.test(styleSrc), '下絵キャンバスは画面外バッファ');
     assert(indexSrc.includes('standalone-file-origin'), '配布用 index.html は単一ファイル');
     assert(!indexSrc.includes('<script src="./vendor/pdf-lib.min.js">'), '配布用は pdf-lib をインライン化');
     assert(!indexSrc.includes('<script src="./AppCore.js">'), '配布用は AppCore をインライン化');
@@ -74,7 +77,7 @@ async function main() {
     assert(appCoreSrc.includes('overlayVectorObjects'), 'オブジェクト描画経路がある');
     assert(appCoreSrc.includes('if (this.basePdfBytes)'), '切り出しでも下絵を常に embedPdf する');
     assert(appCoreSrc.includes('clipPageAndDrawEmbedded'), '切り出しは Form XObject をクリップ描画する');
-    assert(appCoreSrc.includes('isOffscreenCanvasSupported: false'), 'OffscreenCanvas を無効にしてプレビューする');
+    assert(appCoreSrc.includes('drawImage(this.pdfCanvas'), '重ねキャンバスに下絵をコピーする');
     const dbSrc = readFileSync(join(root, 'DBManager.js'), 'utf8');
     assert(dbSrc.includes('createMemoryDatabase'), 'file:// ではメモリDBを使う');
 

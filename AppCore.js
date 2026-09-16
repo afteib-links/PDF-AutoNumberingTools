@@ -27,9 +27,9 @@ class PdfEditorCore {
         this.workspace = 'place';
 
         this.pdfCanvas = document.getElementById('pdf-render-canvas');
-        this.pdfCtx = this.pdfCanvas.getContext('2d');
+        this.pdfCtx = this.pdfCanvas.getContext('2d', { alpha: false, willReadFrequently: true });
         this.layerCanvas = document.getElementById('interactive-layer-canvas');
-        this.layerCtx = this.layerCanvas.getContext('2d');
+        this.layerCtx = this.layerCanvas.getContext('2d', { alpha: false });
         this.canvasWrapper = document.getElementById('canvas-wrapper');
 
         this.currentRenderTask = null;    
@@ -520,7 +520,23 @@ class PdfEditorCore {
     }
 
     renderInteractiveLayer() {
-        this.layerCtx.clearRect(0, 0, this.layerCanvas.width, this.layerCanvas.height);
+        const w = this.layerCanvas.width;
+        const h = this.layerCanvas.height;
+        this.layerCtx.setTransform(1, 0, 0, 1, 0, 0);
+        this.layerCtx.globalCompositeOperation = 'copy';
+        // 下絵キャンバスは非表示バッファ。表示面へ不透明コピーしてからオブジェクトを描く
+        if (this.pdfCanvas && this.pdfCanvas.width > 0 && this.pdfCanvas.height > 0) {
+            try {
+                this.layerCtx.drawImage(this.pdfCanvas, 0, 0, w, h);
+            } catch (e) {
+                this.layerCtx.fillStyle = '#ffffff';
+                this.layerCtx.fillRect(0, 0, w, h);
+            }
+        } else {
+            this.layerCtx.fillStyle = '#ffffff';
+            this.layerCtx.fillRect(0, 0, w, h);
+        }
+        this.layerCtx.globalCompositeOperation = 'source-over';
 
         this.buildAutoTextIndexMap();
 
