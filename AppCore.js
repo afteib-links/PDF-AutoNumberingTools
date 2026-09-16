@@ -51,7 +51,10 @@ class PdfEditorCore {
         const opts = {
             data: data,
             cMapUrl: 'https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/cmaps/',
-            cMapPacked: true
+            cMapPacked: true,
+            standardFontDataUrl: 'https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/standard_fonts/',
+            isOffscreenCanvasSupported: false,
+            useSystemFonts: true
         };
         if (typeof location !== 'undefined' && location.protocol === 'file:') {
             opts.disableRange = true;
@@ -330,6 +333,10 @@ class PdfEditorCore {
             this.canvasWrapper.style.width = `${viewport.width}px`;
             this.canvasWrapper.style.height = `${viewport.height}px`;
 
+            this.pdfCtx.setTransform(1, 0, 0, 1, 0, 0);
+            this.pdfCtx.fillStyle = '#ffffff';
+            this.pdfCtx.fillRect(0, 0, this.pdfCanvas.width, this.pdfCanvas.height);
+
             const renderContext = {
                 canvasContext: this.pdfCtx,
                 viewport: viewport
@@ -349,6 +356,7 @@ class PdfEditorCore {
                 return;
             }
             console.error("PDFレンダリングエラー:", error);
+            alert("PDFは開けましたが画面に描けませんでした: " + (error && error.message ? error.message : error));
         }
     }
 

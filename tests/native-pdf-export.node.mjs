@@ -74,6 +74,7 @@ async function main() {
     assert(appCoreSrc.includes('overlayVectorObjects'), 'オブジェクト描画経路がある');
     assert(appCoreSrc.includes('if (this.basePdfBytes)'), '切り出しでも下絵を常に embedPdf する');
     assert(appCoreSrc.includes('clipPageAndDrawEmbedded'), '切り出しは Form XObject をクリップ描画する');
+    assert(appCoreSrc.includes('isOffscreenCanvasSupported: false'), 'OffscreenCanvas を無効にしてプレビューする');
     const dbSrc = readFileSync(join(root, 'DBManager.js'), 'utf8');
     assert(dbSrc.includes('createMemoryDatabase'), 'file:// ではメモリDBを使う');
 
