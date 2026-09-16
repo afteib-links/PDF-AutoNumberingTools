@@ -1,0 +1,91 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <title>preview-layout</title>
+    <style>
+        body { background: #475569; margin: 24px; }
+        #canvas-wrapper {
+            position: relative;
+            display: inline-block;
+            line-height: 0;
+            background-color: white;
+            overflow: hidden;
+            min-width: 40px;
+            min-height: 40px;
+        }
+        #pdf-render-canvas {
+            position: absolute;
+            left: 0;
+            top: 0;
+            width: 1px;
+            height: 1px;
+            pointer-events: none;
+            opacity: 0;
+        }
+        #interactive-layer-canvas {
+            display: block;
+            position: relative;
+            background-color: #ffffff;
+        }
+        #out { color: #fff; font: 14px monospace; margin-bottom: 12px; }
+    </style>
+</head>
+<body>
+<pre id="out">running...</pre>
+<div id="canvas-wrapper">
+    <canvas id="pdf-render-canvas" width="1" height="1"></canvas>
+    <canvas id="interactive-layer-canvas" width="200" height="200"></canvas>
+</div>
+<script src="../vendor/pdf.min.js"></script>
+<script src="../vendor/pdf.worker.min.js"></script>
+<script>
+(async function () {
+    const out = document.getElementById('out');
+    const lines = [];
+    function log(s) { lines.push(String(s)); out.textContent = lines.join('\n'); }
+    try {
+        if (pdfjsWorker && pdfjsWorker.WorkerMessageHandler && pdfjsLib.PDFWorker) {
+            pdfjsLib.GlobalWorkerOptions.workerSrc = URL.createObjectURL(new Blob([''], { type: 'text/javascript' }));
+            pdfjsLib.PDFWorker.prototype._initialize = function () { this._setupFakeWorker(); };
+        }
+        const data = new Uint8Array(await (await fetch('preview-sample.pdf')).arrayBuffer());
+        const doc = await pdfjsLib.getDocument({
+            data,
+            cMapPacked: true,
+            isOffscreenCanvasSupported: false,
+            useSystemFonts: true
+        }).promise;
+        const page = await doc.getPage(1);
+        const viewport = page.getViewport({ scale: 1.5 });
+        const pdfCanvas = document.getElementById('pdf-render-canvas');
+        const layer = document.getElementById('interactive-layer-canvas');
+        const wrap = document.getElementById('canvas-wrapper');
+        pdfCanvas.width = Math.floor(viewport.width);
+        pdfCanvas.height = Math.floor(viewport.height);
+        layer.width = pdfCanvas.width;
+        layer.height = pdfCanvas.height;
+        layer.style.width = viewport.width + 'px';
+        layer.style.height = viewport.height + 'px';
+        wrap.style.width = viewport.width + 'px';
+        wrap.style.height = viewport.height + 'px';
+        const pdfCtx = pdfCanvas.getContext('2d', { alpha: false, willReadFrequently: true });
+        const layerCtx = layer.getContext('2d', { alpha: false });
+        pdfCtx.fillStyle = '#ffffff';
+        pdfCtx.fillRect(0, 0, pdfCanvas.width, pdfCanvas.height);
+        await page.render({ canvasContext: pdfCtx, viewport }).promise;
+        layerCtx.globalCompositeOperation = 'copy';
+        layerCtx.drawImage(pdfCanvas, 0, 0, layer.width, layer.height);
+        layerCtx.globalCompositeOperation = 'source-over';
+        const p = layerCtx.getImageData(Math.floor(layer.width / 2), Math.floor(layer.height / 2), 1, 1).data;
+        log('size=' + layer.width + 'x' + layer.height);
+        log('centerRGBA=' + Array.from(p).join(','));
+        document.documentElement.dataset.previewPixel = Array.from(p).join(',');
+        log('OK');
+    } catch (e) {
+        log('ERR ' + (e && e.stack ? e.stack : e));
+    }
+})();
+</script>
+</body>
+</html>

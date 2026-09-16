@@ -64,7 +64,8 @@ async function main() {
     assert(!indexSrc.includes('<script src="./AppCore.js">'), '配布用は AppCore をインライン化');
     assert(indexSrc.includes('createMemoryDatabase'), 'file:// 用メモリDBが入っている');
     assert(indexSrc.includes('_setupFakeWorker'), 'pdf.js はメインスレッドで動かす');
-    assert(indexDevSrc.includes('src="./vendor/pdf-lib.min.js"'), '開発用 HTML は分割読み込み');
+    assert(indexDevSrc.includes('id="pdf-export-mode-select"'), '開発用 HTML に出力方式がある');
+    assert(/toolbar-cluster">\s*<span class="toolbar-label">作業<\/span>/.test(indexDevSrc), '作業ツールバーの div が閉じすぎていない');
     assert(indexSrc.includes('id="pdf-export-mode-select"'), '出力方式セレクトがある');
     assert(indexSrc.includes('value="image"') && indexSrc.includes('value="vector"'), '画像／オブジェクトの選択肢がある');
     assert(indexSrc.includes('番号もオブジェクト') && indexSrc.includes('番号は画像'), '番号の重ね方の文言がある');
