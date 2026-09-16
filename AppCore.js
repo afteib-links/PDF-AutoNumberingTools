@@ -16,7 +16,14 @@ class PdfEditorCore {
         this.currentPageNum = 1;
         this.totalPageNum = 1;
         
-        this.selectedInstanceIds = new Set(); 
+        this.selectedInstanceIds = new Set();
+        this.selectedCropRegionIds = new Set();
+        this.cropRegions = [];
+        this.pdfLayers = [];
+        this.optionalContentConfig = null;
+        this.layerVisibilityByName = {};
+        this.respectLayerVisibility = true;
+        this.exportScope = 'all';
 
         this.pdfCanvas = document.getElementById('pdf-render-canvas');
         this.pdfCtx = this.pdfCanvas.getContext('2d');
@@ -56,6 +63,7 @@ class PdfEditorCore {
             this.pdfDocument = await loadingTask.promise;
             this.totalPageNum = this.pdfDocument.numPages;
             this.currentPageNum = 1;
+            await this.refreshPdfLayers();
             await this.renderPage(this.currentPageNum);
             return true;
         } catch (error) { 
@@ -86,6 +94,7 @@ class PdfEditorCore {
             this.pdfDocument = await loadingTask.promise;
             this.totalPageNum = this.pdfDocument.numPages;
             if (this.currentPageNum > this.totalPageNum) this.currentPageNum = 1;
+            await this.refreshPdfLayers();
             await this.renderPage(this.currentPageNum);
             return true;
         } catch (error) { 
@@ -173,7 +182,10 @@ class PdfEditorCore {
                     dataStore.put({
                         projectId: newProjectId,
                         groups: cleanGroups,
-                        instances: cleanInstances
+                        instances: cleanInstances,
+                        cropRegions: JSON.parse(JSON.stringify(this.cropRegions || [])),
+                        layerVisibilityByName: Object.assign({}, this.layerVisibilityByName || {}),
+                        exportScope: this.exportScope || 'all'
                     });
                 };
 
@@ -223,9 +235,13 @@ class PdfEditorCore {
                 this.currentPdfPath = projectRecord.pdfPath || "";
                 this.groups = dataRecord && dataRecord.groups ? dataRecord.groups : [];
                 this.instances = dataRecord && dataRecord.instances ? dataRecord.instances : [];
+                this.cropRegions = dataRecord && Array.isArray(dataRecord.cropRegions) ? dataRecord.cropRegions : [];
+                this.layerVisibilityByName = dataRecord && dataRecord.layerVisibilityByName ? dataRecord.layerVisibilityByName : {};
+                this.exportScope = dataRecord && dataRecord.exportScope ? dataRecord.exportScope : 'all';
                 this.currentPageNum = projectRecord.currentPageNum || 1;
                 this.coordConverter.zoomLevel = projectRecord.zoomLevel || 1.0;
                 this.selectedInstanceIds.clear();
+                this.selectedCropRegionIds.clear();
 
                 if (blobRecord && blobRecord.pdfBytes) {
                     const rawBytes = blobRecord.pdfBytes instanceof Uint8Array 
@@ -240,6 +256,7 @@ class PdfEditorCore {
                     });
                     this.pdfDocument = await loadingTask.promise;
                     this.totalPageNum = this.pdfDocument.numPages;
+                    await this.refreshPdfLayers();
                     await this.renderPage(this.currentPageNum);
                 } else {
                     this.basePdfBytes = null;
@@ -310,7 +327,13 @@ class PdfEditorCore {
             this.canvasWrapper.style.width = `${viewport.width}px`;
             this.canvasWrapper.style.height = `${viewport.height}px`;
 
-            const renderContext = { canvasContext: this.pdfCtx, viewport: viewport };
+            const renderContext = {
+                canvasContext: this.pdfCtx,
+                viewport: viewport
+            };
+            if (this.respectLayerVisibility && this.optionalContentConfig) {
+                renderContext.optionalContentConfig = this.optionalContentConfig;
+            }
             this.currentRenderTask = page.render(renderContext);
             await this.currentRenderTask.promise;
             this.currentRenderTask = null;
@@ -377,12 +400,114 @@ class PdfEditorCore {
         });
     }
 
-    renderInteractiveLayer() {
-        this.layerCtx.clearRect(0, 0, this.layerCanvas.width, this.layerCanvas.height);
-        if (!this.instances || this.instances.length === 0) {
-            this.drawSelectionBox();
+    async refreshPdfLayers() {
+        this.pdfLayers = [];
+        this.optionalContentConfig = null;
+        if (!this.pdfDocument || typeof this.pdfDocument.getOptionalContentConfig !== 'function') {
             return;
         }
+        try {
+            this.optionalContentConfig = await this.pdfDocument.getOptionalContentConfig();
+        } catch (e) {
+            this.optionalContentConfig = null;
+            return;
+        }
+        if (typeof PdfLayoutTools === 'undefined') return;
+        this.pdfLayers = PdfLayoutTools.listOptionalContentLayers(this.optionalContentConfig);
+        for (let i = 0; i < this.pdfLayers.length; i++) {
+            const layer = this.pdfLayers[i];
+            if (Object.prototype.hasOwnProperty.call(this.layerVisibilityByName, layer.name)) {
+                const vis = !!this.layerVisibilityByName[layer.name];
+                if (this.optionalContentConfig && typeof this.optionalContentConfig.setVisibility === 'function') {
+                    try {
+                        this.optionalContentConfig.setVisibility(layer.id, vis);
+                    } catch (e) { /* 一部の PDF では id 形式が異なる */ }
+                }
+                layer.visible = vis;
+            } else {
+                this.layerVisibilityByName[layer.name] = layer.visible;
+            }
+        }
+    }
+
+    async setPdfLayerVisible(layerId, visible) {
+        const layer = this.pdfLayers.find(l => l.id === layerId);
+        if (!layer) return;
+        layer.visible = !!visible;
+        this.layerVisibilityByName[layer.name] = layer.visible;
+        if (this.optionalContentConfig && typeof this.optionalContentConfig.setVisibility === 'function') {
+            try {
+                this.optionalContentConfig.setVisibility(layerId, layer.visible);
+            } catch (e) {
+                console.warn('レイヤー可視切替に失敗:', e);
+            }
+        }
+        await this.renderPage(this.currentPageNum);
+    }
+
+    async setAllPdfLayersVisible(visible) {
+        for (let i = 0; i < this.pdfLayers.length; i++) {
+            const layer = this.pdfLayers[i];
+            layer.visible = !!visible;
+            this.layerVisibilityByName[layer.name] = layer.visible;
+            if (this.optionalContentConfig && typeof this.optionalContentConfig.setVisibility === 'function') {
+                try {
+                    this.optionalContentConfig.setVisibility(layer.id, layer.visible);
+                } catch (e) { /* skip */ }
+            }
+        }
+        await this.renderPage(this.currentPageNum);
+    }
+
+    nextCropRegionId() {
+        if (!this.cropRegions.length) return 1;
+        return Math.max.apply(null, this.cropRegions.map(r => r.id)) + 1;
+    }
+
+    addCropRegion(paperKey, landscape) {
+        const tools = PdfLayoutTools;
+        const pageW = this.coordConverter.pageWidthPoints || 595.28;
+        const pageH = this.coordConverter.pageHeightPoints || 841.89;
+        const region = tools.createCenteredRegion(
+            this.nextCropRegionId(),
+            this.currentPageNum - 1,
+            paperKey || 'A4',
+            !!landscape,
+            pageW,
+            pageH,
+            0.72
+        );
+        this.cropRegions.push(region);
+        this.selectedCropRegionIds.clear();
+        this.selectedCropRegionIds.add(region.id);
+        this.requestLayerRender();
+        return region;
+    }
+
+    getPageSizeForIndex(pageIndex) {
+        return {
+            width: this.coordConverter.pageWidthPoints || 595.28,
+            height: this.coordConverter.pageHeightPoints || 841.89,
+            pageIndex: pageIndex
+        };
+    }
+
+    applyPaperToSelectedCropRegions(paperKey, landscape) {
+        const pageW = this.coordConverter.pageWidthPoints || 595.28;
+        const pageH = this.coordConverter.pageHeightPoints || 841.89;
+        const cur = this.currentPageNum - 1;
+        this.cropRegions = this.cropRegions.map(r => {
+            if (!this.selectedCropRegionIds.has(r.id)) return r;
+            if (r.pageIndex !== cur) {
+                return Object.assign({}, r, { paperKey: paperKey, landscape: !!landscape });
+            }
+            return PdfLayoutTools.applyPaperToRegion(r, paperKey, landscape, pageW, pageH);
+        });
+        this.requestLayerRender();
+    }
+
+    renderInteractiveLayer() {
+        this.layerCtx.clearRect(0, 0, this.layerCanvas.width, this.layerCanvas.height);
 
         this.buildAutoTextIndexMap();
 
@@ -410,8 +535,69 @@ class PdfEditorCore {
             this.drawInstance(instance, group, this.layerCtx, this.coordConverter, false);
         }
 
+        this.drawCropRegions();
         this.drawSelectionBox();
     }
+
+    drawCropRegions() {
+        const ctx = this.layerCtx;
+        const curPage = this.currentPageNum - 1;
+        const regions = this.cropRegions.filter(r => r.pageIndex === curPage);
+        if (!regions.length) return;
+        const zoom = this.coordConverter.zoomLevel || 1;
+
+        for (let i = 0; i < this.cropRegions.length; i++) {
+            const region = this.cropRegions[i];
+            if (region.pageIndex !== curPage) continue;
+            const screen = this.coordConverter.pdfPointsToScreenPixels(region.x, region.y, region.width, region.height, false);
+            const selected = this.selectedCropRegionIds.has(region.id);
+            const paper = PdfLayoutTools.getPaperSize(region.paperKey, region.landscape);
+            const orderLabel = String(i + 1);
+
+            ctx.save();
+            ctx.strokeStyle = selected ? '#dc2626' : '#2563eb';
+            ctx.lineWidth = selected ? 2.5 : 1.5;
+            ctx.setLineDash([8 * zoom, 4 * zoom]);
+            ctx.strokeRect(screen.x, screen.y, screen.width, screen.height);
+            ctx.setLineDash([]);
+
+            ctx.fillStyle = selected ? 'rgba(220, 38, 38, 0.08)' : 'rgba(37, 99, 235, 0.06)';
+            ctx.fillRect(screen.x, screen.y, screen.width, screen.height);
+
+            const tag = `${orderLabel} ${paper.label}${region.landscape ? ' 横' : ' 縦'}`;
+            ctx.font = `${11 * Math.max(1, zoom)}px sans-serif`;
+            ctx.textBaseline = 'top';
+            const tw = ctx.measureText(tag).width + 10;
+            const th = 16 * Math.max(1, zoom);
+            ctx.fillStyle = selected ? '#dc2626' : '#2563eb';
+            ctx.fillRect(screen.x, screen.y - th, tw, th);
+            ctx.fillStyle = '#ffffff';
+            ctx.fillText(tag, screen.x + 5, screen.y - th + 2);
+
+            if (selected) {
+                const hs = 7;
+                const handles = [
+                    [screen.x, screen.y],
+                    [screen.x + screen.width / 2, screen.y],
+                    [screen.x + screen.width, screen.y],
+                    [screen.x + screen.width, screen.y + screen.height / 2],
+                    [screen.x + screen.width, screen.y + screen.height],
+                    [screen.x + screen.width / 2, screen.y + screen.height],
+                    [screen.x, screen.y + screen.height],
+                    [screen.x, screen.y + screen.height / 2]
+                ];
+                ctx.fillStyle = '#ffffff';
+                ctx.strokeStyle = '#dc2626';
+                ctx.lineWidth = 1.5;
+                handles.forEach(([hx, hy]) => {
+                    ctx.fillRect(hx - hs / 2, hy - hs / 2, hs, hs);
+                    ctx.strokeRect(hx - hs / 2, hy - hs / 2, hs, hs);
+                });
+            }
+            ctx.restore();
+        }
+    }
+
 
     drawSelectionBox() {
         if (!this.selectionBox) return;
@@ -760,7 +946,124 @@ class PdfEditorCore {
         }
     }
 
+    hitTestCropHandle(screenX, screenY, region) {
+        const screen = this.coordConverter.pdfPointsToScreenPixels(region.x, region.y, region.width, region.height, false);
+        const rx = screen.x, ry = screen.y, rw = screen.width, rh = screen.height;
+        const defs = [
+            { dir: 'nw', x: rx, y: ry },
+            { dir: 'n', x: rx + rw / 2, y: ry },
+            { dir: 'ne', x: rx + rw, y: ry },
+            { dir: 'e', x: rx + rw, y: ry + rh / 2 },
+            { dir: 'se', x: rx + rw, y: ry + rh },
+            { dir: 's', x: rx + rw / 2, y: ry + rh },
+            { dir: 'sw', x: rx, y: ry + rh },
+            { dir: 'w', x: rx, y: ry + rh / 2 }
+        ];
+        return defs.find(h => Math.abs(screenX - h.x) <= 7 && Math.abs(screenY - h.y) <= 7) || null;
+    }
+
+    hitTestCropRegion(screenX, screenY, pageIndex) {
+        const list = this.cropRegions.filter(r => r.pageIndex === pageIndex);
+        for (let i = list.length - 1; i >= 0; i--) {
+            const region = list[i];
+            const handle = this.hitTestCropHandle(screenX, screenY, region);
+            if (handle) return { region: region, handle: handle.dir };
+            const screen = this.coordConverter.pdfPointsToScreenPixels(region.x, region.y, region.width, region.height, false);
+            if (screenX >= screen.x && screenX <= screen.x + screen.width &&
+                screenY >= screen.y && screenY <= screen.y + screen.height) {
+                return { region: region, handle: null };
+            }
+        }
+        return null;
+    }
+
+    getCleanPdfBytes() {
+        if (!this.basePdfBytes) return null;
+        let bytes = this.basePdfBytes instanceof Uint8Array
+            ? this.basePdfBytes
+            : new Uint8Array(this.basePdfBytes);
+        if (bytes.byteLength === 0) {
+            throw new Error("PDFデータが空（0バイト）です。PDFを再度読み込んでください。");
+        }
+        let headerOffset = -1;
+        const searchLimit = Math.min(bytes.length - 5, 4096);
+        for (let i = 0; i <= searchLimit; i++) {
+            if (
+                bytes[i] === 0x25 &&
+                bytes[i + 1] === 0x50 &&
+                bytes[i + 2] === 0x44 &&
+                bytes[i + 3] === 0x46 &&
+                bytes[i + 4] === 0x2D
+            ) {
+                headerOffset = i;
+                break;
+            }
+        }
+        if (headerOffset === -1) {
+            throw new Error("有効なPDFヘッダー（%PDF-）が見つかりません。ファイルが破損している可能性があります。");
+        }
+        if (headerOffset > 0) bytes = bytes.subarray(headerOffset);
+        return new Uint8Array(bytes.slice(0));
+    }
+
+    async rasterizePdfPage(pageIndex, scale) {
+        if (!this.pdfDocument) return null;
+        const page = await this.pdfDocument.getPage(pageIndex + 1);
+        const viewport = page.getViewport({ scale: scale });
+        const canvas = document.createElement('canvas');
+        canvas.width = viewport.width;
+        canvas.height = viewport.height;
+        const ctx = canvas.getContext('2d');
+        ctx.fillStyle = '#ffffff';
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+        const renderContext = { canvasContext: ctx, viewport: viewport };
+        if (this.respectLayerVisibility && this.optionalContentConfig) {
+            renderContext.optionalContentConfig = this.optionalContentConfig;
+        }
+        await page.render(renderContext).promise;
+        return { canvas: canvas, viewport: viewport, pageWidth: viewport.width / scale, pageHeight: viewport.height / scale };
+    }
+
+    async flattenPageToImage(pdfDoc, pageIdx, includeObjects) {
+        const page = pdfDoc.getPage(pageIdx);
+        const { width: ptW, height: ptH } = page.getSize();
+        const exportScale = 3.0;
+        let offCanvas;
+        let offCtx;
+        if (this.pdfDocument) {
+            const raster = await this.rasterizePdfPage(pageIdx, exportScale);
+            offCanvas = raster.canvas;
+            offCtx = offCanvas.getContext('2d');
+        } else {
+            offCanvas = document.createElement('canvas');
+            offCanvas.width = ptW * exportScale;
+            offCanvas.height = ptH * exportScale;
+            offCtx = offCanvas.getContext('2d');
+            offCtx.fillStyle = '#ffffff';
+            offCtx.fillRect(0, 0, offCanvas.width, offCanvas.height);
+        }
+        if (includeObjects) {
+            const exportConverter = new CoordinateConverter();
+            exportConverter.setPageContext(ptW, ptH, null);
+            exportConverter.setZoom(exportScale);
+            const pageInstances = this.getSortedVisiblePageInstances(pageIdx);
+            for (const instance of pageInstances) {
+                const group = this.groups.find(g => g.id === instance.groupId);
+                if (!group || group.isHidden) continue;
+                this.drawInstance(instance, group, offCtx, exportConverter, true);
+            }
+        }
+        const pngImage = await pdfDoc.embedPng(offCanvas.toDataURL('image/png'));
+        page.drawImage(pngImage, { x: 0, y: 0, width: ptW, height: ptH });
+    }
+
     async overlayImageObjects(pdfDoc, totalPages) {
+        if (this.respectLayerVisibility && this.pdfDocument) {
+            for (let pageIdx = 0; pageIdx < totalPages; pageIdx++) {
+                await this.flattenPageToImage(pdfDoc, pageIdx, true);
+            }
+            return;
+        }
         const exportScale = 3.0;
         for (let pageIdx = 0; pageIdx < totalPages; pageIdx++) {
             const pageInstances = this.getSortedVisiblePageInstances(pageIdx);
@@ -795,47 +1098,131 @@ class PdfEditorCore {
         }
     }
 
-    async exportPdf(mode = 'image') {
+    async downloadPdfBytes(pdfDoc) {
+        const pdfBytes = await pdfDoc.save();
+        const blob = new Blob([pdfBytes], { type: "application/pdf" });
+        const link = document.createElement("a");
+        link.href = URL.createObjectURL(blob);
+        const downloadName = (this.currentPdfName || 'output').replace(/\.pdf$/i, '') + '_edited.pdf';
+        link.download = downloadName;
+        link.click();
+        URL.revokeObjectURL(link.href);
+    }
+
+    async exportCroppedPdf(exportMode) {
+        if (!this.cropRegions.length) {
+            throw new Error('抽出エリアがありません。帳票サイズを選んで「範囲追加」してください。');
+        }
+        const { PDFDocument } = PDFLib;
+        const outDoc = await PDFDocument.create();
+        let srcDoc = null;
+        let embeddedPages = [];
+        if (this.basePdfBytes && exportMode === 'vector') {
+            srcDoc = await PDFDocument.load(this.getCleanPdfBytes(), { ignoreEncryption: true });
+            if (this.respectLayerVisibility) {
+                PdfLayoutTools.applyOcgVisibility(srcDoc, this.layerVisibilityByName);
+            }
+            embeddedPages = await outDoc.embedPdf(srcDoc, srcDoc.getPageIndices());
+        }
+
+        let vectorFont = null;
+        if (exportMode === 'vector') {
+            if (typeof PdfNativeExport === 'undefined') {
+                throw new Error('PDFネイティブ出力モジュールが読み込まれていません。');
+            }
+            PdfNativeExport.registerFontkitOnDocument(outDoc);
+            const fontBytes = await PdfNativeExport.fetchNotoSansJpFontBytes();
+            vectorFont = await outDoc.embedFont(fontBytes, { subset: true });
+        }
+
+        this.buildAutoTextIndexMap();
+
+        for (let i = 0; i < this.cropRegions.length; i++) {
+            const region = this.cropRegions[i];
+            const paper = PdfLayoutTools.getPaperSize(region.paperKey, region.landscape);
+            const page = outDoc.addPage([paper.width, paper.height]);
+
+            if (exportMode === 'image' || !this.pdfDocument) {
+                const scale = Math.max(2, (paper.width / Math.max(region.width, 1)) * 2);
+                let srcCanvas;
+                let srcW;
+                let srcH;
+                if (this.pdfDocument) {
+                    const raster = await this.rasterizePdfPage(region.pageIndex, scale);
+                    srcCanvas = raster.canvas;
+                    srcW = raster.pageWidth;
+                    srcH = raster.pageHeight;
+                } else {
+                    srcW = this.coordConverter.pageWidthPoints || 595.28;
+                    srcH = this.coordConverter.pageHeightPoints || 841.89;
+                    srcCanvas = document.createElement('canvas');
+                    srcCanvas.width = srcW * scale;
+                    srcCanvas.height = srcH * scale;
+                    const fill = srcCanvas.getContext('2d');
+                    fill.fillStyle = '#ffffff';
+                    fill.fillRect(0, 0, srcCanvas.width, srcCanvas.height);
+                }
+                const exportConverter = new CoordinateConverter();
+                exportConverter.setPageContext(srcW, srcH, null);
+                exportConverter.setZoom(scale);
+                const ctx = srcCanvas.getContext('2d');
+                const pageInstances = this.getSortedVisiblePageInstances(region.pageIndex);
+                for (const instance of pageInstances) {
+                    const group = this.groups.find(g => g.id === instance.groupId);
+                    if (!group || group.isHidden) continue;
+                    this.drawInstance(instance, group, ctx, exportConverter, true);
+                }
+                const sx = region.x * scale;
+                const sy = (srcH - region.y - region.height) * scale;
+                const sw = region.width * scale;
+                const sh = region.height * scale;
+                const dest = document.createElement('canvas');
+                dest.width = Math.max(1, Math.round(paper.width * 2));
+                dest.height = Math.max(1, Math.round(paper.height * 2));
+                dest.getContext('2d').drawImage(srcCanvas, sx, sy, sw, sh, 0, 0, dest.width, dest.height);
+                const pngImage = await outDoc.embedPng(dest.toDataURL('image/png'));
+                page.drawImage(pngImage, { x: 0, y: 0, width: paper.width, height: paper.height });
+            } else {
+                const emb = embeddedPages[region.pageIndex];
+                if (emb) {
+                    PdfLayoutTools.clipPageAndDrawEmbedded(page, emb, region, paper, PDFLib);
+                }
+                const pageInstances = this.getSortedVisiblePageInstances(region.pageIndex);
+                for (const instance of pageInstances) {
+                    const group = this.groups.find(g => g.id === instance.groupId);
+                    if (!group || group.isHidden) continue;
+                    const style = this.getInstanceStyle(instance, group);
+                    if (!PdfLayoutTools.rectsIntersect(PdfLayoutTools.instanceBounds(instance, style), region)) continue;
+                    const mapped = PdfLayoutTools.mapInstanceToRegion(instance, style, region, paper);
+                    const displayText = this.resolveAutoText(style.rawText, instance, group);
+                    PdfNativeExport.drawInstanceOnPage(page, mapped.instance, mapped.style, displayText, vectorFont);
+                }
+            }
+        }
+
+        await this.downloadPdfBytes(outDoc);
+    }
+
+    async exportPdf(mode = 'image', options = {}) {
         const exportMode = mode === 'vector' ? 'vector' : 'image';
+        if (options.respectLayers === false) this.respectLayerVisibility = false;
+        else if (options.respectLayers === true) this.respectLayerVisibility = true;
+        const scope = options.scope || this.exportScope || 'all';
         try {
+            if (scope === 'regions') {
+                await this.exportCroppedPdf(exportMode);
+                return;
+            }
+
             const { PDFDocument } = PDFLib;
             let pdfDoc = null;
             let totalPages = 1;
 
             if (this.basePdfBytes) {
-                let bytes = this.basePdfBytes instanceof Uint8Array
-                    ? this.basePdfBytes
-                    : new Uint8Array(this.basePdfBytes);
-
-                if (bytes.byteLength === 0) {
-                    throw new Error("PDFデータが空（0バイト）です。PDFを再度読み込んでください。");
+                pdfDoc = await PDFDocument.load(this.getCleanPdfBytes(), { ignoreEncryption: true });
+                if (this.respectLayerVisibility) {
+                    PdfLayoutTools.applyOcgVisibility(pdfDoc, this.layerVisibilityByName);
                 }
-
-                let headerOffset = -1;
-                const searchLimit = Math.min(bytes.length - 5, 4096);
-                for (let i = 0; i <= searchLimit; i++) {
-                    if (
-                        bytes[i] === 0x25 &&
-                        bytes[i + 1] === 0x50 &&
-                        bytes[i + 2] === 0x44 &&
-                        bytes[i + 3] === 0x46 &&
-                        bytes[i + 4] === 0x2D
-                    ) {
-                        headerOffset = i;
-                        break;
-                    }
-                }
-
-                if (headerOffset === -1) {
-                    throw new Error("有効なPDFヘッダー（%PDF-）が見つかりません。ファイルが破損している可能性があります。");
-                }
-
-                if (headerOffset > 0) {
-                    bytes = bytes.subarray(headerOffset);
-                }
-
-                const cleanBytes = new Uint8Array(bytes.slice(0));
-                pdfDoc = await PDFDocument.load(cleanBytes, { ignoreEncryption: true });
                 totalPages = pdfDoc.getPageCount();
             } else {
                 pdfDoc = await PDFDocument.create();
@@ -860,14 +1247,7 @@ class PdfEditorCore {
                 await this.overlayImageObjects(pdfDoc, totalPages);
             }
 
-            const pdfBytes = await pdfDoc.save();
-            const blob = new Blob([pdfBytes], { type: "application/pdf" });
-            const link = document.createElement("a");
-            link.href = URL.createObjectURL(blob);
-            const downloadName = (this.currentPdfName || 'output').replace(/\.pdf$/i, '') + '_edited.pdf';
-            link.download = downloadName;
-            link.click();
-            URL.revokeObjectURL(link.href);
+            await this.downloadPdfBytes(pdfDoc);
         } catch (e) {
             console.error("PDF出力失敗:", e);
             alert("PDF出力失敗: " + e.message);

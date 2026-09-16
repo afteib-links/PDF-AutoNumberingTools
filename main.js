@@ -15,7 +15,8 @@ document.addEventListener('DOMContentLoaded', async () => {
     function pushHistory() {
         undoStack.push({
             instances: JSON.parse(JSON.stringify(core.instances)),
-            groups: JSON.parse(JSON.stringify(core.groups))
+            groups: JSON.parse(JSON.stringify(core.groups)),
+            cropRegions: JSON.parse(JSON.stringify(core.cropRegions || []))
         });
         if (undoStack.length > maxStack) undoStack.shift();
         redoStack.length = 0;
@@ -30,6 +31,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     // ヘッダー要素
     const btnModeSelect = document.getElementById('btn-mode-select');
     const btnModeDraw = document.getElementById('btn-mode-draw');
+    const btnModeCrop = document.getElementById('btn-mode-crop');
     const btnUndo = document.getElementById('btn-undo');
     const btnRedo = document.getElementById('btn-redo');
 
@@ -56,6 +58,16 @@ document.addEventListener('DOMContentLoaded', async () => {
     const projectNameInput = document.getElementById('project-name');
     const btnGeneratePdf = document.getElementById('btn-generate-pdf');
     const pdfExportModeSelect = document.getElementById('pdf-export-mode-select');
+    const pdfExportScopeSelect = document.getElementById('pdf-export-scope-select');
+    const pdfExportVisibleLayers = document.getElementById('pdf-export-visible-layers');
+    const paperSizeSelect = document.getElementById('paper-size-select');
+    const paperOrientSelect = document.getElementById('paper-orient-select');
+    const btnAddCropRegion = document.getElementById('btn-add-crop-region');
+    const btnDeleteCropRegion = document.getElementById('btn-delete-crop-region');
+    const pdfLayerList = document.getElementById('pdf-layer-list');
+    const cropRegionList = document.getElementById('crop-region-list');
+    const btnLayersAllOn = document.getElementById('btn-layers-all-on');
+    const btnLayersAllOff = document.getElementById('btn-layers-all-off');
 
     // 左サイドバー：グループマスター & インライン設定パネル
     const groupCardsContainer = document.getElementById('group-cards-container');
@@ -189,6 +201,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     let resizeHandleDir = ''; 
     let dragStartMouse = { x: 0, y: 0 };
     let dragInitialPositions = new Map();
+    let dragInitialCrop = null;
 
     function syncColorDisplay(inputEl, labelEl) {
         if (!inputEl || !labelEl) return;
@@ -240,44 +253,117 @@ document.addEventListener('DOMContentLoaded', async () => {
             });
     }
 
+    function currentPaperKey() {
+        return paperSizeSelect ? paperSizeSelect.value : 'A4';
+    }
+    function currentLandscape() {
+        return paperOrientSelect ? paperOrientSelect.value === 'landscape' : false;
+    }
+
+    function renderPdfLayerList() {
+        if (!pdfLayerList) return;
+        if (!core.pdfLayers || core.pdfLayers.length === 0) {
+            pdfLayerList.innerHTML = '<p class="help-text">このPDFに切替可能なレイヤーはありません。</p>';
+            return;
+        }
+        pdfLayerList.innerHTML = '';
+        core.pdfLayers.forEach(layer => {
+            const row = document.createElement('label');
+            row.className = 'layer-row';
+            const cb = document.createElement('input');
+            cb.type = 'checkbox';
+            cb.checked = layer.visible;
+            cb.addEventListener('change', async () => {
+                await core.setPdfLayerVisible(layer.id, cb.checked);
+                renderPdfLayerList();
+            });
+            const name = document.createElement('span');
+            name.textContent = layer.name;
+            row.appendChild(cb);
+            row.appendChild(name);
+            pdfLayerList.appendChild(row);
+        });
+    }
+
+    function renderCropRegionList() {
+        if (!cropRegionList) return;
+        if (!core.cropRegions.length) {
+            cropRegionList.innerHTML = '<p class="help-text">「範囲追加」で帳票枠を置けます。</p>';
+            return;
+        }
+        cropRegionList.innerHTML = '';
+        core.cropRegions.forEach((region, idx) => {
+            const row = document.createElement('div');
+            row.className = 'crop-row' + (core.selectedCropRegionIds.has(region.id) ? ' selected' : '');
+            const paper = PdfLayoutTools.getPaperSize(region.paperKey, region.landscape);
+            row.innerHTML = `<span>${idx + 1}. ページ${region.pageIndex + 1}</span><span class="crop-row-meta">${paper.label}${region.landscape ? ' 横' : ' 縦'}</span>`;
+            row.addEventListener('click', async () => {
+                core.selectedCropRegionIds.clear();
+                core.selectedCropRegionIds.add(region.id);
+                core.selectedInstanceIds.clear();
+                if (core.currentPageNum !== region.pageIndex + 1) {
+                    await core.changePage(region.pageIndex + 1);
+                    updatePageIndicator();
+                }
+                if (paperSizeSelect) paperSizeSelect.value = region.paperKey;
+                if (paperOrientSelect) paperOrientSelect.value = region.landscape ? 'landscape' : 'portrait';
+                core.renderInteractiveLayer();
+                renderCropRegionList();
+                renderGroupedAccordion();
+            });
+            cropRegionList.appendChild(row);
+        });
+    }
+
     function updateStatusBar() {
         if (!appStatus) return;
-        const modeLabel = currentMode === 'draw' ? '登録モード（クリックで配置）' : '選択モード';
+        const modeLabel = currentMode === 'draw'
+            ? '登録モード（クリックで配置）'
+            : (currentMode === 'crop' ? '範囲モード（枠の移動・拡縮）' : '選択モード');
         const zoom = Math.round(core.coordConverter.zoomLevel * 100);
-        appStatus.textContent = `${modeLabel} | 選択 ${core.selectedInstanceIds.size}件 | ${zoom}%`;
+        const cropN = core.cropRegions.length;
+        appStatus.textContent = `${modeLabel} | 選択 ${core.selectedInstanceIds.size}件 | 抽出 ${cropN} | ${zoom}%`;
     }
 
     function setMode(mode) {
         currentMode = mode;
-        if (mode === 'select') {
-            btnModeSelect.classList.add('active');
-            btnModeDraw.classList.remove('active');
-            core.layerCanvas.style.cursor = 'default';
-        } else {
-            btnModeDraw.classList.add('active');
-            btnModeSelect.classList.remove('active');
+        btnModeSelect.classList.toggle('active', mode === 'select');
+        btnModeDraw.classList.toggle('active', mode === 'draw');
+        if (btnModeCrop) btnModeCrop.classList.toggle('active', mode === 'crop');
+        if (mode === 'draw') {
             core.layerCanvas.style.cursor = 'crosshair';
+        } else if (mode === 'crop') {
+            core.layerCanvas.style.cursor = 'move';
+            core.selectedInstanceIds.clear();
+            core.renderInteractiveLayer();
+        } else {
+            core.layerCanvas.style.cursor = 'default';
         }
         updateStatusBar();
     }
 
     btnModeSelect.addEventListener('click', () => setMode('select'));
     btnModeDraw.addEventListener('click', () => setMode('draw'));
+    if (btnModeCrop) btnModeCrop.addEventListener('click', () => setMode('crop'));
 
     btnUndo.addEventListener('click', () => {
         if (undoStack.length === 0) return;
         redoStack.push({
             instances: JSON.parse(JSON.stringify(core.instances)),
-            groups: JSON.parse(JSON.stringify(core.groups))
+            groups: JSON.parse(JSON.stringify(core.groups)),
+            cropRegions: JSON.parse(JSON.stringify(core.cropRegions || []))
         });
         const prev = undoStack.pop();
         core.instances = prev.instances;
         core.groups = prev.groups;
+        core.cropRegions = prev.cropRegions || [];
         core.selectedInstanceIds.clear();
+        core.selectedCropRegionIds.clear();
         core.renderInteractiveLayer();
         renderGroupCards();
         loadActiveGroupIntoInlinePanel();
         renderGroupedAccordion();
+        renderCropRegionList();
         updateHistoryButtons();
         updateStatusBar();
     });
@@ -286,16 +372,20 @@ document.addEventListener('DOMContentLoaded', async () => {
         if (redoStack.length === 0) return;
         undoStack.push({
             instances: JSON.parse(JSON.stringify(core.instances)),
-            groups: JSON.parse(JSON.stringify(core.groups))
+            groups: JSON.parse(JSON.stringify(core.groups)),
+            cropRegions: JSON.parse(JSON.stringify(core.cropRegions || []))
         });
         const next = redoStack.pop();
         core.instances = next.instances;
         core.groups = next.groups;
+        core.cropRegions = next.cropRegions || [];
         core.selectedInstanceIds.clear();
+        core.selectedCropRegionIds.clear();
         core.renderInteractiveLayer();
         renderGroupCards();
         loadActiveGroupIntoInlinePanel();
         renderGroupedAccordion();
+        renderCropRegionList();
         updateHistoryButtons();
         updateStatusBar();
     });
@@ -328,16 +418,21 @@ document.addEventListener('DOMContentLoaded', async () => {
                 pushHistory();
                 core.groups = [];
                 core.instances = [];
+                core.cropRegions = [];
                 core.selectedInstanceIds.clear();
+                core.selectedCropRegionIds.clear();
                 activeGroupId = null;
                 hideInlineGroupPanel();
                 renderGroupCards();
+                renderCropRegionList();
             }
         }
         const success = await core.loadPdfFile(file);
         if (success) {
             updatePageIndicator();
             renderGroupedAccordion();
+            renderPdfLayerList();
+            renderCropRegionList();
             updateStatusBar();
         }
         loadPdfFileInput.value = '';
@@ -350,6 +445,8 @@ document.addEventListener('DOMContentLoaded', async () => {
         const success = await core.replacePdfFile(file);
         if (success) {
             updatePageIndicator();
+            renderPdfLayerList();
+            core.renderInteractiveLayer();
         }
         replacePdfFileInput.value = '';
     });
@@ -359,6 +456,7 @@ document.addEventListener('DOMContentLoaded', async () => {
             await core.changePage(core.currentPageNum - 1);
             updatePageIndicator();
             renderGroupedAccordion();
+            renderCropRegionList();
         }
     });
 
@@ -367,6 +465,7 @@ document.addEventListener('DOMContentLoaded', async () => {
             await core.changePage(core.currentPageNum + 1);
             updatePageIndicator();
             renderGroupedAccordion();
+            renderCropRegionList();
         }
     });
 
@@ -401,8 +500,76 @@ document.addEventListener('DOMContentLoaded', async () => {
 
     btnGeneratePdf.addEventListener('click', () => {
         const mode = pdfExportModeSelect ? pdfExportModeSelect.value : 'image';
-        core.exportPdf(mode);
+        const scope = pdfExportScopeSelect ? pdfExportScopeSelect.value : 'all';
+        const respectLayers = pdfExportVisibleLayers ? pdfExportVisibleLayers.checked : true;
+        core.exportScope = scope;
+        core.respectLayerVisibility = respectLayers;
+        core.exportPdf(mode, { scope: scope, respectLayers: respectLayers });
     });
+
+    if (pdfExportScopeSelect) {
+        pdfExportScopeSelect.addEventListener('change', () => {
+            core.exportScope = pdfExportScopeSelect.value;
+        });
+    }
+    if (pdfExportVisibleLayers) {
+        pdfExportVisibleLayers.addEventListener('change', async () => {
+            core.respectLayerVisibility = pdfExportVisibleLayers.checked;
+            if (core.pdfDocument) await core.renderPage(core.currentPageNum);
+        });
+    }
+    if (btnAddCropRegion) {
+        btnAddCropRegion.addEventListener('click', () => {
+            pushHistory();
+            core.addCropRegion(currentPaperKey(), currentLandscape());
+            setMode('crop');
+            if (pdfExportScopeSelect) {
+                pdfExportScopeSelect.value = 'regions';
+                core.exportScope = 'regions';
+            }
+            renderCropRegionList();
+            updateStatusBar();
+        });
+    }
+    if (btnDeleteCropRegion) {
+        btnDeleteCropRegion.addEventListener('click', () => {
+            if (core.selectedCropRegionIds.size === 0) return;
+            pushHistory();
+            core.cropRegions = core.cropRegions.filter(r => !core.selectedCropRegionIds.has(r.id));
+            core.selectedCropRegionIds.clear();
+            core.renderInteractiveLayer();
+            renderCropRegionList();
+            updateStatusBar();
+        });
+    }
+    if (paperSizeSelect) {
+        paperSizeSelect.addEventListener('change', () => {
+            if (core.selectedCropRegionIds.size === 0) return;
+            pushHistory();
+            core.applyPaperToSelectedCropRegions(currentPaperKey(), currentLandscape());
+            renderCropRegionList();
+        });
+    }
+    if (paperOrientSelect) {
+        paperOrientSelect.addEventListener('change', () => {
+            if (core.selectedCropRegionIds.size === 0) return;
+            pushHistory();
+            core.applyPaperToSelectedCropRegions(currentPaperKey(), currentLandscape());
+            renderCropRegionList();
+        });
+    }
+    if (btnLayersAllOn) {
+        btnLayersAllOn.addEventListener('click', async () => {
+            await core.setAllPdfLayersVisible(true);
+            renderPdfLayerList();
+        });
+    }
+    if (btnLayersAllOff) {
+        btnLayersAllOff.addEventListener('click', async () => {
+            await core.setAllPdfLayersVisible(false);
+            renderPdfLayerList();
+        });
+    }
 
     function hideInlineGroupPanel() {
         inlineGroupPanel.classList.remove('is-open');
@@ -1045,6 +1212,33 @@ document.addEventListener('DOMContentLoaded', async () => {
         const clickY = e.clientY - rect.top;
         const curPage = core.currentPageNum - 1;
 
+        const cropHit = core.hitTestCropRegion(clickX, clickY, curPage);
+        if (currentMode === 'crop' || (cropHit && (currentMode !== 'draw'))) {
+            if (currentMode === 'crop' && !cropHit) {
+                core.selectedCropRegionIds.clear();
+                core.renderInteractiveLayer();
+                renderCropRegionList();
+                return;
+            }
+            if (cropHit) {
+                if (!e.shiftKey) core.selectedInstanceIds.clear();
+                core.selectedCropRegionIds.clear();
+                core.selectedCropRegionIds.add(cropHit.region.id);
+                if (paperSizeSelect) paperSizeSelect.value = cropHit.region.paperKey;
+                if (paperOrientSelect) paperOrientSelect.value = cropHit.region.landscape ? 'landscape' : 'portrait';
+                pushHistory();
+                isDragging = true;
+                dragMode = cropHit.handle ? 'crop-resize' : 'crop-move';
+                resizeHandleDir = cropHit.handle || '';
+                dragStartMouse = { x: clickX, y: clickY };
+                dragInitialCrop = Object.assign({}, cropHit.region);
+                core.renderInteractiveLayer();
+                renderCropRegionList();
+                updateStatusBar();
+                return;
+            }
+        }
+
         if (currentMode === 'draw') {
             if (core.groups.length === 0) {
                 alert('先にグループを作成してください。');
@@ -1245,7 +1439,18 @@ document.addEventListener('DOMContentLoaded', async () => {
             }
         }
         if (!isDragging) {
-            layerCanvas.style.cursor = currentMode === 'draw' ? 'crosshair' : 'default';
+            const curPage = core.currentPageNum - 1;
+            const cropHover = core.hitTestCropRegion(currentX, currentY, curPage);
+            if (cropHover && cropHover.handle) {
+                const map = { n: 'ns-resize', s: 'ns-resize', e: 'ew-resize', w: 'ew-resize', ne: 'ne-resize', nw: 'nw-resize', se: 'se-resize', sw: 'sw-resize' };
+                layerCanvas.style.cursor = map[cropHover.handle] || 'move';
+                return;
+            }
+            if (cropHover) {
+                layerCanvas.style.cursor = 'move';
+                return;
+            }
+            layerCanvas.style.cursor = currentMode === 'draw' ? 'crosshair' : (currentMode === 'crop' ? 'move' : 'default');
             return;
         }
 
@@ -1253,8 +1458,20 @@ document.addEventListener('DOMContentLoaded', async () => {
         const deltaScreenY = currentY - dragStartMouse.y;
         const deltaPtX = deltaScreenX / (core.coordConverter.zoomLevel * core.coordConverter.ptToPxRatio);
         const deltaPtY = -deltaScreenY / (core.coordConverter.zoomLevel * core.coordConverter.ptToPxRatio);
+        const pageW = core.coordConverter.pageWidthPoints || 595.28;
+        const pageH = core.coordConverter.pageHeightPoints || 841.89;
 
-        if (dragMode === 'move') {
+        if (dragMode === 'crop-move' && dragInitialCrop) {
+            const moved = PdfLayoutTools.moveRegion(dragInitialCrop, deltaPtX, deltaPtY, pageW, pageH);
+            const idx = core.cropRegions.findIndex(r => r.id === dragInitialCrop.id);
+            if (idx >= 0) core.cropRegions[idx] = moved;
+            core.requestLayerRender();
+        } else if (dragMode === 'crop-resize' && dragInitialCrop) {
+            const resized = PdfLayoutTools.resizeRegion(dragInitialCrop, resizeHandleDir, deltaPtX, deltaPtY, pageW, pageH);
+            const idx = core.cropRegions.findIndex(r => r.id === dragInitialCrop.id);
+            if (idx >= 0) core.cropRegions[idx] = resized;
+            core.requestLayerRender();
+        } else if (dragMode === 'move') {
             dragInitialPositions.forEach((pos, id) => {
                 const inst = core.instances.find(i => i.id === id);
                 if (inst) {
@@ -1346,8 +1563,10 @@ document.addEventListener('DOMContentLoaded', async () => {
             core.selectionBox = null;
         }
         isDragging = false;
+        dragInitialCrop = null;
         core.renderInteractiveLayer();
         renderGroupedAccordion();
+        renderCropRegionList();
         updateStatusBar();
     });
 
@@ -1491,6 +1710,15 @@ document.addEventListener('DOMContentLoaded', async () => {
     });
 
     function deleteSelectedInstances() {
+        if (core.selectedCropRegionIds.size > 0 && (currentMode === 'crop' || core.selectedInstanceIds.size === 0)) {
+            pushHistory();
+            core.cropRegions = core.cropRegions.filter(r => !core.selectedCropRegionIds.has(r.id));
+            core.selectedCropRegionIds.clear();
+            core.renderInteractiveLayer();
+            renderCropRegionList();
+            updateStatusBar();
+            return;
+        }
         if (core.selectedInstanceIds.size === 0) return;
         const ids = Array.from(core.selectedInstanceIds);
         const deletable = ids.filter(id => {
@@ -1641,6 +1869,8 @@ document.addEventListener('DOMContentLoaded', async () => {
                             updatePageIndicator();
                             renderGroupCards();
                             renderGroupedAccordion();
+                            renderPdfLayerList();
+                            renderCropRegionList();
                             updateStatusBar();
                             dataModal.style.display = 'none';
                             alert(`「${item.name}」を復元しました。`);
@@ -1683,7 +1913,9 @@ document.addEventListener('DOMContentLoaded', async () => {
         dataJsonTextarea.value = JSON.stringify({
             scope,
             groups: core.groups,
-            instances: exportInstances
+            instances: exportInstances,
+            cropRegions: core.cropRegions,
+            layerVisibilityByName: core.layerVisibilityByName
         }, null, 2);
     }
 
@@ -1721,10 +1953,13 @@ document.addEventListener('DOMContentLoaded', async () => {
             } else {
                 core.instances = data.instances;
             }
+            if (Array.isArray(data.cropRegions)) core.cropRegions = data.cropRegions;
+            if (data.layerVisibilityByName) core.layerVisibilityByName = data.layerVisibilityByName;
 
             core.renderInteractiveLayer();
             renderGroupCards();
             renderGroupedAccordion();
+            renderCropRegionList();
             alert("データを反映しました。");
             dataModal.style.display = 'none';
         } catch (err) {
@@ -1754,7 +1989,9 @@ document.addEventListener('DOMContentLoaded', async () => {
             currentPdfName: core.currentPdfName,
             pdfBase64: pdfBase64,
             groups: core.groups,
-            instances: core.instances
+            instances: core.instances,
+            cropRegions: core.cropRegions,
+            layerVisibilityByName: core.layerVisibilityByName
         };
 
         const blob = new Blob([JSON.stringify(fullData)], { type: "application/json" });
@@ -1777,6 +2014,8 @@ document.addEventListener('DOMContentLoaded', async () => {
             projectNameInput.value = data.projectName || "復元作業";
             core.groups = data.groups || [];
             core.instances = data.instances || [];
+            core.cropRegions = Array.isArray(data.cropRegions) ? data.cropRegions : [];
+            core.layerVisibilityByName = data.layerVisibilityByName || {};
 
             if (data.pdfBase64) {
                 const bytes = base64ToUint8Array(data.pdfBase64);
@@ -1788,12 +2027,15 @@ document.addEventListener('DOMContentLoaded', async () => {
                 core.pdfDocument = await loadingTask.promise;
                 core.totalPageNum = core.pdfDocument.numPages;
                 core.currentPageNum = 1;
+                await core.refreshPdfLayers();
                 await core.renderPage(1);
             }
 
             renderGroupCards();
             updatePageIndicator();
             renderGroupedAccordion();
+            renderPdfLayerList();
+            renderCropRegionList();
             alert("完全バックアップから復元しました。");
             dataModal.style.display = 'none';
         } catch (err) {
