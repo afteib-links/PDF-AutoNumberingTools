@@ -180,9 +180,11 @@
         const fontSize = style.fontSize;
         const lines = String(displayText == null ? '' : displayText).split('\n');
         let maxTextWidth = 0;
-        for (let i = 0; i < lines.length; i++) {
-            const w = font.widthOfTextAtSize(lines[i], fontSize);
-            if (w > maxTextWidth) maxTextWidth = w;
+        if (font) {
+            for (let i = 0; i < lines.length; i++) {
+                const w = font.widthOfTextAtSize(lines[i], fontSize);
+                if (w > maxTextWidth) maxTextWidth = w;
+            }
         }
         const lineHeight = fontSize * 1.25;
         const totalTextHeight = lines.length * lineHeight;
@@ -205,7 +207,7 @@
         }
 
         const textColor = hexToPdfRgb(style.tColor);
-        const hasText = String(displayText || '').trim() !== '';
+        const hasText = font && String(displayText || '').trim() !== '';
 
         if (shape === 'line') {
             const x2 = x + width;
@@ -328,6 +330,17 @@
         pdfDoc.registerFontkit(getFontkit());
     }
 
+    async function embedNotoSansJpFont(pdfDoc) {
+        registerFontkitOnDocument(pdfDoc);
+        const fontBytes = await fetchNotoSansJpFontBytes();
+        try {
+            return await pdfDoc.embedFont(fontBytes, { subset: true });
+        } catch (e) {
+            console.warn('フォント subset に失敗したため、非 subset で埋め込みます:', e);
+            return await pdfDoc.embedFont(fontBytes, { subset: false });
+        }
+    }
+
     const api = {
         NOTO_SANS_JP_FONT_URLS: NOTO_SANS_JP_FONT_URLS,
         hexToPdfRgb: hexToPdfRgb,
@@ -339,6 +352,7 @@
         fetchNotoSansJpFontBytes: fetchNotoSansJpFontBytes,
         getCachedFontUrl: getCachedFontUrl,
         registerFontkitOnDocument: registerFontkitOnDocument,
+        embedNotoSansJpFont: embedNotoSansJpFont,
         getFontkit: getFontkit
     };
 

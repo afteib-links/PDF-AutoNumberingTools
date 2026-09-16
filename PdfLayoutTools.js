@@ -405,6 +405,59 @@
         }
     }
 
+    const MAX_RASTER_EDGE = 8192;
+
+    function floorCanvasSize(width, height) {
+        return {
+            width: Math.max(1, Math.floor(Number(width) || 0)),
+            height: Math.max(1, Math.floor(Number(height) || 0))
+        };
+    }
+
+    function scaleToFitMaxEdge(pageWidth, pageHeight, scale, maxEdge) {
+        const cap = maxEdge || MAX_RASTER_EDGE;
+        const req = (typeof scale === 'number' && scale > 0) ? scale : 1;
+        const w = pageWidth * req;
+        const h = pageHeight * req;
+        const edge = Math.max(w, h, 1);
+        if (edge <= cap) return req;
+        return req * (cap / edge);
+    }
+
+    function canvasTransformForViewport(viewport, canvasWidth, canvasHeight) {
+        if (!viewport || !viewport.width || !viewport.height) return null;
+        if (canvasWidth === viewport.width && canvasHeight === viewport.height) return null;
+        return [canvasWidth / viewport.width, 0, 0, canvasHeight / viewport.height, 0, 0];
+    }
+
+    function clampDrawImageSource(sx, sy, sw, sh, canvasW, canvasH) {
+        let x = Number(sx) || 0;
+        let y = Number(sy) || 0;
+        let w = Number(sw) || 0;
+        let h = Number(sh) || 0;
+        if (w < 0) {
+            x += w;
+            w = -w;
+        }
+        if (h < 0) {
+            y += h;
+            h = -h;
+        }
+        if (x < 0) {
+            w += x;
+            x = 0;
+        }
+        if (y < 0) {
+            h += y;
+            y = 0;
+        }
+        if (x + w > canvasW) w = canvasW - x;
+        if (y + h > canvasH) h = canvasH - y;
+        w = Math.max(0, w);
+        h = Math.max(0, h);
+        return { sx: x, sy: y, sw: w, sh: h, valid: w >= 1 && h >= 1 };
+    }
+
     const api = {
         MM_TO_PT: MM_TO_PT,
         PAPER_SIZES: PAPER_SIZES,
@@ -423,7 +476,12 @@
         listOptionalContentLayers: listOptionalContentLayers,
         applyOcgVisibility: applyOcgVisibility,
         clipPageAndDrawEmbedded: clipPageAndDrawEmbedded,
-        decodePdfName: decodePdfName
+        decodePdfName: decodePdfName,
+        MAX_RASTER_EDGE: MAX_RASTER_EDGE,
+        floorCanvasSize: floorCanvasSize,
+        scaleToFitMaxEdge: scaleToFitMaxEdge,
+        canvasTransformForViewport: canvasTransformForViewport,
+        clampDrawImageSource: clampDrawImageSource
     };
 
     if (typeof module !== 'undefined' && module.exports) {

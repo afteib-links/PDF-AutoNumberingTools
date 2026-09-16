@@ -87,6 +87,16 @@ async function main() {
     const bytes = await out.save();
     assert(bytes.length > 100, '切り出しページを保存できる');
 
+    const srcClamp = PdfLayoutTools.clampDrawImageSource(-10, -5, 40, 20, 100, 80);
+    assert(srcClamp.sx === 0 && srcClamp.sy === 0, '負の切り出し原点を 0 にクランプ');
+    assert(srcClamp.valid, 'クランプ後は有効');
+    const oob = PdfLayoutTools.clampDrawImageSource(90, 70, 40, 40, 100, 80);
+    assert(oob.sw === 10 && oob.sh === 10, 'キャンバス外は切り詰める');
+    const scaled = PdfLayoutTools.scaleToFitMaxEdge(4000, 3000, 10, 8192);
+    assert(scaled < 10, '巨大ラスタはスケールを落とす');
+    const px = PdfLayoutTools.floorCanvasSize(100.9, 50.2);
+    assert(px.width === 100 && px.height === 50, 'キャンバスは整数化');
+
     console.log('OK layout tools');
 }
 
