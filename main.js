@@ -521,7 +521,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     btnHistorySaveCurrent.addEventListener('click', executeSaveVersion);
 
     btnGeneratePdf.addEventListener('click', () => {
-        const mode = pdfExportModeSelect ? pdfExportModeSelect.value : 'image';
+        const mode = pdfExportModeSelect ? pdfExportModeSelect.value : 'vector';
         const scope = pdfExportScopeSelect ? pdfExportScopeSelect.value : 'all';
         const respectLayers = pdfExportVisibleLayers ? pdfExportVisibleLayers.checked : true;
         core.exportScope = scope;

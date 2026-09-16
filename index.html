@@ -41,9 +41,9 @@
 
                 <div class="toolbar-cluster">
                     <span class="toolbar-label">出力</span>
-                    <select id="pdf-export-mode-select" class="toolbar-select" title="画像は見た目優先のPNG合成、オブジェクトはパス／文字として重ねます">
-                        <option value="image">画像</option>
-                        <option value="vector">オブジェクト</option>
+                    <select id="pdf-export-mode-select" class="toolbar-select" title="番号の重ね方。下絵PDFは常にオブジェクト（パス／文字）のままです">
+                        <option value="vector">番号もオブジェクト</option>
+                        <option value="image">番号は画像</option>
                     </select>
                     <select id="pdf-export-scope-select" class="toolbar-select" title="全ページか、抽出エリアごとに帳票サイズで出力">
                         <option value="all">全ページ</option>
@@ -244,7 +244,7 @@
                         </div>
                         <div>
                             <label class="field-title">フォント</label>
-                            <select id="group-font-select" class="full-input" title="画面プレビュー用。オブジェクト出力では Noto Sans JP に埋め込みます">
+                            <select id="group-font-select" class="full-input" title="画面プレビューと番号画像出力用。番号もオブジェクトのときは Noto Sans JP に埋め込みます">
                                 <option value="Yu Gothic">游ゴシック</option>
                                 <option value="Noto Sans JP">Noto Sans JP</option>
                                 <option value="Hiragino Kaku Gothic ProN">ヒラギノ角ゴ</option>
@@ -625,7 +625,7 @@
                         <li><strong>PDF差替</strong>: 下絵だけ差し替え、配置は残す（元PDFの更新向け）。</li>
                         <li><strong>保存</strong>: IndexedDB にタイムスタンプ付きの新規バージョンとして保存する。</li>
                         <li><strong>データ管理</strong>: 履歴の復元/削除、完全ファイル退避、JSON入出力。</li>
-                        <li><strong>PDF出力</strong>: 出力方式（画像／オブジェクト）と出力対象（全ページ／指定範囲）を選ぶ。「表示レイヤーのみ」をオンにすると、非表示レイヤーは出さない。</li>
+                        <li><strong>PDF出力</strong>: 下絵PDF（全ページ・指定範囲の切り出しとも）は常にオブジェクトのまま出す。セレクトは番号の重ね方だけ（番号もオブジェクト／番号は画像）。出力対象は全ページ／指定範囲。「表示レイヤーのみ」をオンにすると、非表示レイヤーは出さない。</li>
                         <li><strong>切り抜き・レイヤー</strong>: 配置とは別画面。帳票サイズの枠で抽出、PDFレイヤーの表示／非表示。</li>
                     </ul>
                 </details>
