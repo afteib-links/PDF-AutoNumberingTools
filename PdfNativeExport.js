@@ -6,8 +6,8 @@
  */
 (function (root) {
     const NOTO_SANS_JP_FONT_URLS = [
-        'https://cdn.jsdelivr.net/gh/notofonts/noto-cjk@Sans2.004/Sans/SubsetOTF/JP/NotoSansJP-Regular.otf',
-        'https://cdn.jsdelivr.net/npm/@fontsource/noto-sans-jp@5.2.5/files/noto-sans-jp-japanese-400-normal.woff'
+        'https://cdn.jsdelivr.net/fontsource/fonts/noto-sans-jp@5.2.5/japanese-400-normal.ttf',
+        'https://cdn.jsdelivr.net/gh/notofonts/noto-cjk@Sans2.004/Sans/SubsetOTF/JP/NotoSansJP-Regular.otf'
     ];
 
     let cachedFontBytes = null;
@@ -308,6 +308,12 @@
                     lastError = new Error('フォントデータが不正です: ' + url);
                     continue;
                 }
+                const head = new Uint8Array(buf.slice(0, 4));
+                const isWoff = head[0] === 0x77 && head[1] === 0x4F && head[2] === 0x46 && head[3] === 0x46;
+                if (isWoff) {
+                    lastError = new Error('WOFF は PDF 埋め込みに使えません: ' + url);
+                    continue;
+                }
                 cachedFontBytes = buf;
                 cachedFontUrl = url;
                 return cachedFontBytes;
@@ -333,12 +339,27 @@
     async function embedNotoSansJpFont(pdfDoc) {
         registerFontkitOnDocument(pdfDoc);
         const fontBytes = await fetchNotoSansJpFontBytes();
+        const isTrueType = isLikelyTrueTypeFont(fontBytes);
         try {
-            return await pdfDoc.embedFont(fontBytes, { subset: true });
+            return await pdfDoc.embedFont(fontBytes, {
+                subset: isTrueType,
+                customName: 'NotoSansJP'
+            });
         } catch (e) {
-            console.warn('フォント subset に失敗したため、非 subset で埋め込みます:', e);
-            return await pdfDoc.embedFont(fontBytes, { subset: false });
+            console.warn('フォント埋め込みに失敗したため、非 subset で再試行します:', e);
+            return await pdfDoc.embedFont(fontBytes, {
+                subset: false,
+                customName: 'NotoSansJP'
+            });
         }
+    }
+
+    function isLikelyTrueTypeFont(fontBytes) {
+        const u8 = fontBytes instanceof Uint8Array ? fontBytes : new Uint8Array(fontBytes);
+        if (u8.length < 4) return false;
+        const tag = String.fromCharCode(u8[0], u8[1], u8[2], u8[3]);
+        if (tag === 'true' || tag === 'ttcf') return true;
+        return u8[0] === 0x00 && u8[1] === 0x01 && u8[2] === 0x00 && u8[3] === 0x00;
     }
 
     const api = {

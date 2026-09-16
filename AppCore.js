@@ -24,6 +24,7 @@ class PdfEditorCore {
         this.layerVisibilityByName = {};
         this.respectLayerVisibility = true;
         this.exportScope = 'all';
+        this.workspace = 'place';
 
         this.pdfCanvas = document.getElementById('pdf-render-canvas');
         this.pdfCtx = this.pdfCanvas.getContext('2d');
@@ -542,6 +543,7 @@ class PdfEditorCore {
     }
 
     drawCropRegions() {
+        if (this.workspace !== 'extract') return;
         const ctx = this.layerCtx;
         const curPage = this.currentPageNum - 1;
         const regions = this.cropRegions.filter(r => r.pageIndex === curPage);

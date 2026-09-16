@@ -7,6 +7,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     await core.init();
 
     let currentMode = 'select';
+    let currentWorkspace = 'place';
 
     const undoStack = [];
     const redoStack = [];
@@ -29,9 +30,10 @@ document.addEventListener('DOMContentLoaded', async () => {
     }
 
     // ヘッダー要素
+    const btnWorkspacePlace = document.getElementById('btn-workspace-place');
+    const btnWorkspaceExtract = document.getElementById('btn-workspace-extract');
     const btnModeSelect = document.getElementById('btn-mode-select');
     const btnModeDraw = document.getElementById('btn-mode-draw');
-    const btnModeCrop = document.getElementById('btn-mode-crop');
     const btnUndo = document.getElementById('btn-undo');
     const btnRedo = document.getElementById('btn-redo');
 
@@ -317,19 +319,38 @@ document.addEventListener('DOMContentLoaded', async () => {
 
     function updateStatusBar() {
         if (!appStatus) return;
-        const modeLabel = currentMode === 'draw'
-            ? '登録モード（クリックで配置）'
-            : (currentMode === 'crop' ? '範囲モード（枠の移動・拡縮）' : '選択モード');
+        const workspaceLabel = currentWorkspace === 'extract' ? '切り抜き・レイヤー' : '配置';
+        const modeLabel = currentWorkspace === 'extract'
+            ? '枠の移動・拡縮'
+            : (currentMode === 'draw' ? '登録（クリックで配置）' : '選択');
         const zoom = Math.round(core.coordConverter.zoomLevel * 100);
         const cropN = core.cropRegions.length;
-        appStatus.textContent = `${modeLabel} | 選択 ${core.selectedInstanceIds.size}件 | 抽出 ${cropN} | ${zoom}%`;
+        appStatus.textContent = `${workspaceLabel} | ${modeLabel} | 選択 ${core.selectedInstanceIds.size}件 | 抽出 ${cropN} | ${zoom}%`;
+    }
+
+    function setWorkspace(ws) {
+        currentWorkspace = ws === 'extract' ? 'extract' : 'place';
+        core.workspace = currentWorkspace;
+        const app = document.getElementById('app-container');
+        if (app) {
+            app.classList.toggle('workspace-place', currentWorkspace === 'place');
+            app.classList.toggle('workspace-extract', currentWorkspace === 'extract');
+        }
+        if (btnWorkspacePlace) btnWorkspacePlace.classList.toggle('active', currentWorkspace === 'place');
+        if (btnWorkspaceExtract) btnWorkspaceExtract.classList.toggle('active', currentWorkspace === 'extract');
+        if (currentWorkspace === 'extract') {
+            setMode('crop');
+        } else if (currentMode === 'crop') {
+            setMode('select');
+        }
+        core.renderInteractiveLayer();
+        updateStatusBar();
     }
 
     function setMode(mode) {
         currentMode = mode;
         btnModeSelect.classList.toggle('active', mode === 'select');
         btnModeDraw.classList.toggle('active', mode === 'draw');
-        if (btnModeCrop) btnModeCrop.classList.toggle('active', mode === 'crop');
         if (mode === 'draw') {
             core.layerCanvas.style.cursor = 'crosshair';
         } else if (mode === 'crop') {
@@ -344,7 +365,8 @@ document.addEventListener('DOMContentLoaded', async () => {
 
     btnModeSelect.addEventListener('click', () => setMode('select'));
     btnModeDraw.addEventListener('click', () => setMode('draw'));
-    if (btnModeCrop) btnModeCrop.addEventListener('click', () => setMode('crop'));
+    if (btnWorkspacePlace) btnWorkspacePlace.addEventListener('click', () => setWorkspace('place'));
+    if (btnWorkspaceExtract) btnWorkspaceExtract.addEventListener('click', () => setWorkspace('extract'));
 
     btnUndo.addEventListener('click', () => {
         if (undoStack.length === 0) return;
@@ -522,7 +544,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         btnAddCropRegion.addEventListener('click', () => {
             pushHistory();
             core.addCropRegion(currentPaperKey(), currentLandscape());
-            setMode('crop');
+            setWorkspace('extract');
             if (pdfExportScopeSelect) {
                 pdfExportScopeSelect.value = 'regions';
                 core.exportScope = 'regions';
@@ -1213,30 +1235,28 @@ document.addEventListener('DOMContentLoaded', async () => {
         const curPage = core.currentPageNum - 1;
 
         const cropHit = core.hitTestCropRegion(clickX, clickY, curPage);
-        if (currentMode === 'crop' || (cropHit && (currentMode !== 'draw'))) {
-            if (currentMode === 'crop' && !cropHit) {
+        if (currentWorkspace === 'extract') {
+            if (!cropHit) {
                 core.selectedCropRegionIds.clear();
                 core.renderInteractiveLayer();
                 renderCropRegionList();
                 return;
             }
-            if (cropHit) {
-                if (!e.shiftKey) core.selectedInstanceIds.clear();
-                core.selectedCropRegionIds.clear();
-                core.selectedCropRegionIds.add(cropHit.region.id);
-                if (paperSizeSelect) paperSizeSelect.value = cropHit.region.paperKey;
-                if (paperOrientSelect) paperOrientSelect.value = cropHit.region.landscape ? 'landscape' : 'portrait';
-                pushHistory();
-                isDragging = true;
-                dragMode = cropHit.handle ? 'crop-resize' : 'crop-move';
-                resizeHandleDir = cropHit.handle || '';
-                dragStartMouse = { x: clickX, y: clickY };
-                dragInitialCrop = Object.assign({}, cropHit.region);
-                core.renderInteractiveLayer();
-                renderCropRegionList();
-                updateStatusBar();
-                return;
-            }
+            if (!e.shiftKey) core.selectedInstanceIds.clear();
+            core.selectedCropRegionIds.clear();
+            core.selectedCropRegionIds.add(cropHit.region.id);
+            if (paperSizeSelect) paperSizeSelect.value = cropHit.region.paperKey;
+            if (paperOrientSelect) paperOrientSelect.value = cropHit.region.landscape ? 'landscape' : 'portrait';
+            pushHistory();
+            isDragging = true;
+            dragMode = cropHit.handle ? 'crop-resize' : 'crop-move';
+            resizeHandleDir = cropHit.handle || '';
+            dragStartMouse = { x: clickX, y: clickY };
+            dragInitialCrop = Object.assign({}, cropHit.region);
+            core.renderInteractiveLayer();
+            renderCropRegionList();
+            updateStatusBar();
+            return;
         }
 
         if (currentMode === 'draw') {
@@ -1409,7 +1429,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         const currentX = e.clientX - rect.left;
         const currentY = e.clientY - rect.top;
 
-        if (!isDragging && core.selectedInstanceIds.size === 1) {
+        if (!isDragging && currentWorkspace === 'place' && core.selectedInstanceIds.size === 1) {
             const selId = Array.from(core.selectedInstanceIds)[0];
             const selInst = core.instances.find(i => i.id === selId);
             if (selInst && selInst.pageIndex === core.currentPageNum - 1 && !isInstanceLocked(selInst)) {
@@ -1439,22 +1459,19 @@ document.addEventListener('DOMContentLoaded', async () => {
             }
         }
         if (!isDragging) {
-            const curPage = core.currentPageNum - 1;
-            const cropHover = core.hitTestCropRegion(currentX, currentY, curPage);
-            if (cropHover && cropHover.handle) {
-                const map = { n: 'ns-resize', s: 'ns-resize', e: 'ew-resize', w: 'ew-resize', ne: 'ne-resize', nw: 'nw-resize', se: 'se-resize', sw: 'sw-resize' };
-                layerCanvas.style.cursor = map[cropHover.handle] || 'move';
+            if (currentWorkspace === 'extract') {
+                const cropHover = core.hitTestCropRegion(currentX, currentY, core.currentPageNum - 1);
+                if (cropHover && cropHover.handle) {
+                    const map = { n: 'ns-resize', s: 'ns-resize', e: 'ew-resize', w: 'ew-resize', ne: 'ne-resize', nw: 'nw-resize', se: 'se-resize', sw: 'sw-resize' };
+                    layerCanvas.style.cursor = map[cropHover.handle] || 'move';
+                    return;
+                }
+                layerCanvas.style.cursor = cropHover ? 'move' : 'default';
                 return;
             }
-            if (cropHover) {
-                layerCanvas.style.cursor = 'move';
-                return;
-            }
-            layerCanvas.style.cursor = currentMode === 'draw' ? 'crosshair' : (currentMode === 'crop' ? 'move' : 'default');
+            layerCanvas.style.cursor = currentMode === 'draw' ? 'crosshair' : 'default';
             return;
         }
-
-        const deltaScreenX = currentX - dragStartMouse.x;
         const deltaScreenY = currentY - dragStartMouse.y;
         const deltaPtX = deltaScreenX / (core.coordConverter.zoomLevel * core.coordConverter.ptToPxRatio);
         const deltaPtY = -deltaScreenY / (core.coordConverter.zoomLevel * core.coordConverter.ptToPxRatio);
@@ -1571,6 +1588,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     });
 
     layerCanvas.addEventListener('dblclick', () => {
+        if (currentWorkspace !== 'place') return;
         if (core.selectedInstanceIds.size === 1) {
             const id = Array.from(core.selectedInstanceIds)[0];
             const inst = core.instances.find(i => i.id === id);
@@ -1710,7 +1728,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     });
 
     function deleteSelectedInstances() {
-        if (core.selectedCropRegionIds.size > 0 && (currentMode === 'crop' || core.selectedInstanceIds.size === 0)) {
+        if (core.selectedCropRegionIds.size > 0 && currentWorkspace === 'extract') {
             pushHistory();
             core.cropRegions = core.cropRegions.filter(r => !core.selectedCropRegionIds.has(r.id));
             core.selectedCropRegionIds.clear();

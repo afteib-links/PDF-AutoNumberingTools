@@ -88,8 +88,7 @@ async function main() {
 
     const outDoc = await PDFDocument.load(baseBytes);
     PdfNativeExport.registerFontkitOnDocument(outDoc);
-    const fontBytes = await PdfNativeExport.fetchNotoSansJpFontBytes();
-    const jpFont = await outDoc.embedFont(fontBytes, { subset: true });
+    const jpFont = await PdfNativeExport.embedNotoSansJpFont(outDoc);
     const page = outDoc.getPage(0);
 
     const common = {
@@ -173,6 +172,8 @@ async function main() {
     assert(!decoded.includes('/Subtype /Image'), '画像XObjectを埋め込んでいない');
     assert(!raw.includes('IDAT'), 'PNGラスタ埋め込みがない');
     assert(/NotoSansJP/i.test(decoded), 'Noto Sans JP が埋め込まれている');
+    assert(/\.ttf/i.test(String(PdfNativeExport.getCachedFontUrl() || '')), 'Edge 向けに TrueType を埋め込む');
+    assert(/CIDFontType2|\/TrueType/.test(decoded), 'CIDFontType2 (TrueType) である');
     assert(/\s[ml]\s/.test(decoded) || / m\n/.test(decoded) || decoded.includes(' m '), 'ベクトルパス (m/l) がある');
     assert(/Tj|TJ/.test(decoded), 'テキスト演算子がある');
     assert(/\scm[\s]/.test(decoded), 'cm 変換行列がある');

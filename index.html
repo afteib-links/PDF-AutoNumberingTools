@@ -7,10 +7,16 @@
     <link rel="stylesheet" href="style.css">
 </head>
 <body>
-    <div id="app-container">
+    <div id="app-container" class="workspace-place">
         <header id="app-header">
             <div class="header-row file-row">
                 <div class="toolbar-cluster">
+                    <span class="toolbar-label">画面</span>
+                    <div class="btn-group">
+                        <button type="button" id="btn-workspace-place" class="btn active" title="連番オブジェクトの配置">配置</button>
+                        <button type="button" id="btn-workspace-extract" class="btn" title="切り抜き枠とPDFレイヤー">切り抜き・レイヤー</button>
+                    </div>
+                </div>
                     <span class="toolbar-label">作業</span>
                     <input type="text" id="project-name" placeholder="作業名を入力..." value="新規作業">
                     <button id="btn-save-project" class="btn primary">保存</button>
@@ -53,10 +59,9 @@
             <div class="header-row edit-row">
                 <div class="toolbar-cluster">
                     <span class="toolbar-label">モード</span>
-                    <div class="btn-group">
+                    <div class="btn-group place-only">
                         <button id="btn-mode-select" class="btn active" title="選択・移動・サイズ変更">選択</button>
                         <button id="btn-mode-draw" class="btn" title="クリック位置に配置">登録</button>
-                        <button id="btn-mode-crop" class="btn" title="帳票サイズの抽出枠を移動・拡大縮小">範囲</button>
                     </div>
                 </div>
 
@@ -66,7 +71,7 @@
                     <button id="btn-redo" class="btn" title="やり直し (Ctrl+Y)" disabled>やり直す</button>
                 </div>
 
-                <div class="toolbar-cluster">
+                <div class="toolbar-cluster place-only">
                     <span class="toolbar-label">横整列</span>
                     <div class="align-group">
                         <button id="btn-align-left" class="btn" title="左寄せ">左</button>
@@ -76,7 +81,7 @@
                     </div>
                 </div>
 
-                <div class="toolbar-cluster">
+                <div class="toolbar-cluster place-only">
                     <span class="toolbar-label">縦整列</span>
                     <div class="align-group">
                         <button id="btn-align-top" class="btn" title="上寄せ">上</button>
@@ -97,7 +102,7 @@
                 </div>
             </div>
 
-            <div class="header-row range-row">
+            <div class="header-row range-row extract-only">
                 <div class="toolbar-cluster">
                     <span class="toolbar-label">帳票</span>
                     <select id="paper-size-select" class="toolbar-select" title="抽出枠の帳票サイズ">
@@ -126,15 +131,15 @@
 
         <main id="main-workspace">
             <aside id="left-sidebar" class="sidebar">
-                <div class="sidebar-header">
+                <div class="sidebar-header place-only">
                     <h2>グループマスター <button id="btn-add-group" class="btn primary small">新規</button></h2>
                     <p class="help-text">カード選択で登録先に指定。設定で一括変更。</p>
                 </div>
-                <div class="sidebar-content group-list-scroll">
+                <div class="sidebar-content group-list-scroll place-only">
                     <div id="group-cards-container"></div>
                 </div>
 
-                <div id="group-inline-panel" class="group-setting-container">
+                <div id="group-inline-panel" class="group-setting-container place-only">
                     <div class="panel-top-row">
                         <div class="panel-title-text">グループ設定</div>
                         <div class="panel-checks">
@@ -275,7 +280,7 @@
                     </div>
                 </div>
 
-                <div id="pdf-layer-panel" class="pdf-aux-panel">
+                <div id="pdf-layer-panel" class="pdf-aux-panel extract-only">
                     <div class="panel-top-row">
                         <div class="panel-title-text">PDFレイヤー</div>
                         <div class="panel-checks">
@@ -288,7 +293,7 @@
                     </div>
                 </div>
 
-                <div id="crop-region-panel" class="pdf-aux-panel">
+                <div id="crop-region-panel" class="pdf-aux-panel extract-only">
                     <div class="panel-top-row">
                         <div class="panel-title-text">抽出エリア（出力順）</div>
                     </div>
@@ -305,7 +310,7 @@
                 </div>
             </section>
 
-            <aside id="right-sidebar" class="sidebar">
+            <aside id="right-sidebar" class="sidebar place-only">
                 <div class="sidebar-header">
                     <h2>配置済みリスト</h2>
                     <p class="help-text">ドラッグで連番並替。ダブルクリックで詳細。</p>
@@ -591,7 +596,8 @@
                 <h4>ショートカット</h4>
                 <table class="help-table">
                     <tbody>
-                        <tr><th>選択 / 登録 / 範囲</th><td>ヘッダーの「選択」「登録」「範囲」ボタン</td></tr>
+                        <tr><th>画面切替</th><td>ヘッダー「配置」／「切り抜き・レイヤー」</td></tr>
+                        <tr><th>選択 / 登録</th><td>配置画面の「選択」「登録」ボタン</td></tr>
                         <tr><th>元に戻す</th><td>Ctrl+Z（Mac は Cmd+Z）</td></tr>
                         <tr><th>やり直し</th><td>Ctrl+Y または Ctrl+Shift+Z</td></tr>
                         <tr><th>微調整</th><td>矢印キー（移動量は右サイドバー）</td></tr>
@@ -605,10 +611,9 @@
                 <details open>
                     <summary>基本の流れ</summary>
                     <ol>
-                        <li>「PDF読込」で下絵を開く。</li>
-                        <li>左の「新規」でグループを作り、形・文字・連番を設定する。</li>
-                        <li>「登録」モードでキャンバスをクリックし、オブジェクトを置く。</li>
-                        <li>「選択」モードで移動・リサイズ・整列する。</li>
+                        <li>ヘッダーで「配置」または「切り抜き・レイヤー」画面を選ぶ。</li>
+                        <li>配置画面: 左の「新規」でグループを作り、「登録」でオブジェクトを置く。</li>
+                        <li>切り抜き・レイヤー画面: 帳票枠の追加／移動と PDF レイヤーの表示切替。</li>
                         <li>「保存」でブラウザにバージョン保存。「PDF出力」で完成稿を書き出す。</li>
                     </ol>
                 </details>
@@ -621,8 +626,7 @@
                         <li><strong>保存</strong>: IndexedDB にタイムスタンプ付きの新規バージョンとして保存する。</li>
                         <li><strong>データ管理</strong>: 履歴の復元/削除、完全ファイル退避、JSON入出力。</li>
                         <li><strong>PDF出力</strong>: 出力方式（画像／オブジェクト）と出力対象（全ページ／指定範囲）を選ぶ。「表示レイヤーのみ」をオンにすると、非表示レイヤーは出さない。</li>
-                        <li><strong>指定範囲</strong>: 帳票サイズ（A3–A6 / B3–B6 / ハガキ）を選ぶと「範囲追加」で枠が出る。枠は移動・拡大縮小でき、複数枠はリスト順でページになる。</li>
-                        <li><strong>PDFレイヤー</strong>: 左サイドバーで表示／非表示。CAD などの任意コンテンツグループがある PDF 向け。</li>
+                        <li><strong>切り抜き・レイヤー</strong>: 配置とは別画面。帳票サイズの枠で抽出、PDFレイヤーの表示／非表示。</li>
                     </ul>
                 </details>
 
