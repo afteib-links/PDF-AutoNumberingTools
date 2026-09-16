@@ -1,0 +1,679 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PDF配置ツール</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div id="app-container" class="workspace-place">
+        <header id="app-header">
+            <div class="header-row file-row">
+                <div class="toolbar-cluster">
+                    <span class="toolbar-label">画面</span>
+                    <div class="btn-group">
+                        <button type="button" id="btn-workspace-place" class="btn active" title="連番オブジェクトの配置">配置</button>
+                        <button type="button" id="btn-workspace-extract" class="btn" title="切り抜き枠とPDFレイヤー">切り抜き・レイヤー</button>
+                    </div>
+                </div>
+                <div class="toolbar-cluster">
+                    <span class="toolbar-label">作業</span>
+                    <input type="text" id="project-name" placeholder="作業名を入力..." value="新規作業">
+                    <button id="btn-save-project" class="btn primary">保存</button>
+                    <button id="btn-data-view" class="btn">データ管理</button>
+                    <button id="btn-help" class="btn">操作ヘルプ</button>
+                </div>
+
+                <div class="toolbar-cluster">
+                    <span class="toolbar-label">PDF</span>
+                    <button id="btn-load-pdf-trigger" class="btn highlight" onclick="document.getElementById('load-pdf-file').click()">PDF読込</button>
+                    <input type="file" id="load-pdf-file" accept="application/pdf" hidden>
+                    <button id="btn-replace-pdf" class="btn warning">PDF差替</button>
+                    <input type="file" id="replace-pdf-file" accept="application/pdf" hidden>
+                    <button id="btn-prev-page" class="btn" disabled>前へ</button>
+                    <span id="page-indicator">ページ <span id="current-page-num">1</span> / <span id="total-page-num">1</span></span>
+                    <button id="btn-next-page" class="btn" disabled>次へ</button>
+                </div>
+
+                <div class="toolbar-cluster status-cluster">
+                    <span id="app-status" class="status-text">選択モード | 選択 0件 | 100%</span>
+                </div>
+
+                <div class="toolbar-cluster">
+                    <span class="toolbar-label">出力</span>
+                    <select id="pdf-export-mode-select" class="toolbar-select" title="番号の重ね方。下絵PDFは常にオブジェクト（パス／文字）のままです">
+                        <option value="vector">番号もオブジェクト</option>
+                        <option value="image">番号は画像</option>
+                    </select>
+                    <select id="pdf-export-scope-select" class="toolbar-select" title="全ページか、抽出エリアごとに帳票サイズで出力">
+                        <option value="all">全ページ</option>
+                        <option value="regions">指定範囲</option>
+                    </select>
+                    <label class="check-label header-check" title="非表示にしたPDFレイヤーは出力に含めません">
+                        <input type="checkbox" id="pdf-export-visible-layers" checked> 表示レイヤーのみ
+                    </label>
+                    <button id="btn-generate-pdf" class="btn success">PDF出力</button>
+                </div>
+            </div>
+
+            <div class="header-row edit-row">
+                <div class="toolbar-cluster">
+                    <span class="toolbar-label">モード</span>
+                    <div class="btn-group place-only">
+                        <button id="btn-mode-select" class="btn active" title="選択・移動・サイズ変更">選択</button>
+                        <button id="btn-mode-draw" class="btn" title="クリック位置に配置">登録</button>
+                    </div>
+                </div>
+
+                <div class="toolbar-cluster">
+                    <span class="toolbar-label">履歴</span>
+                    <button id="btn-undo" class="btn" title="元に戻す (Ctrl+Z)" disabled>戻す</button>
+                    <button id="btn-redo" class="btn" title="やり直し (Ctrl+Y)" disabled>やり直す</button>
+                </div>
+
+                <div class="toolbar-cluster place-only">
+                    <span class="toolbar-label">横整列</span>
+                    <div class="align-group">
+                        <button id="btn-align-left" class="btn" title="左寄せ">左</button>
+                        <button id="btn-align-hcenter" class="btn" title="左右中央寄せ">中央</button>
+                        <button id="btn-align-right" class="btn" title="右寄せ">右</button>
+                        <button id="btn-distribute-h" class="btn" title="横均等割り">均等</button>
+                    </div>
+                </div>
+
+                <div class="toolbar-cluster place-only">
+                    <span class="toolbar-label">縦整列</span>
+                    <div class="align-group">
+                        <button id="btn-align-top" class="btn" title="上寄せ">上</button>
+                        <button id="btn-align-vcenter" class="btn" title="上下中央寄せ">中</button>
+                        <button id="btn-align-bottom" class="btn" title="下寄せ">下</button>
+                        <button id="btn-distribute-v" class="btn" title="縦均等割り">均等</button>
+                    </div>
+                </div>
+
+                <div class="toolbar-cluster">
+                    <span class="toolbar-label">表示</span>
+                    <button id="btn-zoom-out" class="btn" title="縮小">−</button>
+                    <div class="zoom-control-container">
+                        <input type="number" id="zoom-input" value="100" min="50" max="800" step="10">
+                        <span class="zoom-unit">%</span>
+                    </div>
+                    <button id="btn-zoom-in" class="btn" title="拡大">＋</button>
+                </div>
+            </div>
+
+            <div class="header-row range-row extract-only">
+                <div class="toolbar-cluster">
+                    <span class="toolbar-label">帳票</span>
+                    <select id="paper-size-select" class="toolbar-select" title="抽出枠の帳票サイズ">
+                        <option value="A3">A3</option>
+                        <option value="A4" selected>A4</option>
+                        <option value="A5">A5</option>
+                        <option value="A6">A6</option>
+                        <option value="B3">B3</option>
+                        <option value="B4">B4</option>
+                        <option value="B5">B5</option>
+                        <option value="B6">B6</option>
+                        <option value="hagaki">ハガキ</option>
+                    </select>
+                    <select id="paper-orient-select" class="toolbar-select">
+                        <option value="portrait">縦</option>
+                        <option value="landscape">横</option>
+                    </select>
+                    <button id="btn-add-crop-region" class="btn highlight" title="現在のページに帳票サイズの枠を追加">範囲追加</button>
+                    <button id="btn-delete-crop-region" class="btn danger" title="選択中の抽出枠を削除">範囲削除</button>
+                </div>
+                <div class="toolbar-cluster">
+                    <span class="help-text header-help">サイズを選んで範囲追加。枠は移動・拡大縮小できます。複数枠は出力順にページになります。</span>
+                </div>
+            </div>
+        </header>
+
+        <main id="main-workspace">
+            <aside id="left-sidebar" class="sidebar">
+                <div class="sidebar-header place-only">
+                    <h2>グループマスター <button id="btn-add-group" class="btn primary small">新規</button></h2>
+                    <p class="help-text">カード選択で登録先に指定。設定で一括変更。</p>
+                </div>
+                <div class="sidebar-content group-list-scroll place-only">
+                    <div id="group-cards-container"></div>
+                </div>
+
+                <div id="group-inline-panel" class="group-setting-container place-only">
+                    <div class="panel-top-row">
+                        <div class="panel-title-text">グループ設定</div>
+                        <div class="panel-checks">
+                            <label class="check-label"><input type="checkbox" id="group-is-locked"> ロック</label>
+                            <label class="check-label blue"><input type="checkbox" id="group-is-hidden"> 非表示</label>
+                        </div>
+                    </div>
+
+                    <div class="field-block">
+                        <label class="field-title">グループ名</label>
+                        <input type="text" id="group-name-input" class="full-input">
+                    </div>
+
+                    <div class="section-title">形と大きさ</div>
+                    <div class="field-grid-2col">
+                        <div>
+                            <label class="field-title">枠の形</label>
+                            <select id="group-shape-select" class="full-input">
+                                <option value="rectangle">四角形</option>
+                                <option value="circle">円形</option>
+                                <option value="triangle">三角形</option>
+                                <option value="star">星形</option>
+                                <option value="line">一本線</option>
+                            </select>
+                        </div>
+                        <div>
+                            <label class="field-title">優先度 (zIndex)</label>
+                            <input type="number" id="group-zindex-input" class="full-input" value="0" step="1">
+                        </div>
+                    </div>
+
+                    <div class="field-grid-3col">
+                        <div>
+                            <label class="field-title">幅(pt)</label>
+                            <input type="number" id="group-width-input" class="full-input" step="1">
+                        </div>
+                        <div>
+                            <label class="field-title">高さ(pt)</label>
+                            <input type="number" id="group-height-input" class="full-input" step="1">
+                        </div>
+                        <div class="checkbox-center">
+                            <label class="check-label plain"><input type="checkbox" id="group-size-auto"> 自動幅</label>
+                        </div>
+                    </div>
+
+                    <div class="line-settings" id="group-line-settings">
+                        <div class="section-title">線の端点</div>
+                        <div class="field-grid-3col">
+                            <div>
+                                <label class="field-title">始点形状</label>
+                                <select id="group-startcap-select" class="full-input">
+                                    <option value="none">なし</option>
+                                    <option value="arrow">矢印</option>
+                                    <option value="circle">丸</option>
+                                </select>
+                            </div>
+                            <div>
+                                <label class="field-title">終点形状</label>
+                                <select id="group-endcap-select" class="full-input">
+                                    <option value="none">なし</option>
+                                    <option value="arrow">矢印</option>
+                                    <option value="circle">丸</option>
+                                </select>
+                            </div>
+                            <div>
+                                <label class="field-title">端点サイズ(pt)</label>
+                                <input type="number" id="group-capsize-input" class="full-input" min="1" step="0.5" value="6">
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="section-title">線</div>
+                    <div class="field-grid-3col">
+                        <div>
+                            <label class="field-title">線の太さ(pt)</label>
+                            <input type="number" id="group-borderwidth-input" class="full-input" step="0.5" min="0" value="1.5">
+                        </div>
+                        <div>
+                            <label class="field-title">枠線色</label>
+                            <div class="color-picker-box">
+                                <input type="color" id="group-bordercolor-input" value="#000000">
+                                <span class="color-hex-text" id="group-bordercolor-text">#000000</span>
+                            </div>
+                        </div>
+                        <div class="checkbox-center">
+                            <label class="check-label plain"><input type="checkbox" id="group-has-border" checked> 枠線描画</label>
+                        </div>
+                    </div>
+
+                    <div class="section-title">文字</div>
+                    <div class="field-grid-3col">
+                        <div>
+                            <label class="field-title">文字サイズ</label>
+                            <input type="number" id="group-fontsize-input" class="full-input" min="1" step="1" value="12">
+                        </div>
+                        <div>
+                            <label class="field-title">文字色</label>
+                            <div class="color-picker-box">
+                                <input type="color" id="group-textcolor-input" value="#000000">
+                                <span class="color-hex-text" id="group-textcolor-text">#000000</span>
+                            </div>
+                        </div>
+                        <div>
+                            <label class="field-title">フォント</label>
+                            <select id="group-font-select" class="full-input" title="画面プレビューと番号画像出力用。番号もオブジェクトのときは Noto Sans JP に埋め込みます">
+                                <option value="Yu Gothic">游ゴシック</option>
+                                <option value="Noto Sans JP">Noto Sans JP</option>
+                                <option value="Hiragino Kaku Gothic ProN">ヒラギノ角ゴ</option>
+                                <option value="Meiryo">メイリオ</option>
+                            </select>
+                        </div>
+                    </div>
+
+                    <div class="field-grid-2col">
+                        <div>
+                            <label class="field-title">背景色</label>
+                            <div class="color-picker-box">
+                                <input type="color" id="group-bgcolor-input" value="#ffffff">
+                                <span class="color-hex-text" id="group-bgcolor-text">#FFFFFF</span>
+                            </div>
+                        </div>
+                        <div>
+                            <label class="field-title">背景不透明度 (0-1)</label>
+                            <input type="number" id="group-bgopacity-input" class="full-input" min="0" max="1" step="0.1" value="0">
+                        </div>
+                    </div>
+
+                    <div class="section-title">テキスト / 連番</div>
+                    <div class="field-grid-custom-text">
+                        <div>
+                            <label class="field-title">基本テキスト（{auto:000} で連番）</label>
+                            <textarea id="group-text-input" rows="2" class="full-input"></textarea>
+                        </div>
+                        <div>
+                            <label class="field-title">開始番号</label>
+                            <input type="number" id="group-startnum-input" class="full-input" min="0" step="1" value="1">
+                        </div>
+                    </div>
+                </div>
+
+                <div id="pdf-layer-panel" class="pdf-aux-panel extract-only">
+                    <div class="panel-top-row">
+                        <div class="panel-title-text">PDFレイヤー</div>
+                        <div class="panel-checks">
+                            <button type="button" id="btn-layers-all-on" class="btn small">全表示</button>
+                            <button type="button" id="btn-layers-all-off" class="btn small">全非表示</button>
+                        </div>
+                    </div>
+                    <div id="pdf-layer-list" class="pdf-layer-list">
+                        <p class="help-text">PDF読込後、レイヤーがあれば表示されます。</p>
+                    </div>
+                </div>
+
+                <div id="crop-region-panel" class="pdf-aux-panel extract-only">
+                    <div class="panel-top-row">
+                        <div class="panel-title-text">抽出エリア（出力順）</div>
+                    </div>
+                    <div id="crop-region-list" class="crop-region-list">
+                        <p class="help-text">「範囲追加」で帳票枠を置けます。</p>
+                    </div>
+                </div>
+            </aside>
+
+            <section id="center-workspace">
+                <div id="canvas-wrapper">
+                    <canvas id="pdf-render-canvas" width="1" height="1"></canvas>
+                    <canvas id="interactive-layer-canvas" width="595" height="842"></canvas>
+                </div>
+            </section>
+
+            <aside id="right-sidebar" class="sidebar place-only">
+                <div class="sidebar-header">
+                    <h2>配置済みリスト</h2>
+                    <p class="help-text">ドラッグで連番並替。ダブルクリックで詳細。</p>
+                    <div class="move-step-panel">
+                        <div class="move-step-header">
+                            <label>矢印キー移動量 (pt)</label>
+                            <input type="number" id="move-step-number" min="0.1" max="50" step="0.1" value="1.0">
+                        </div>
+                        <input type="range" id="move-step-slider" min="0.1" max="50" step="0.1" value="1.0">
+                    </div>
+                    <input type="text" id="instance-search" placeholder="テキストやグループ名で検索">
+                </div>
+                <div class="sidebar-content instance-scroll-container">
+                    <div id="grouped-instance-accordion"></div>
+                </div>
+            </aside>
+        </main>
+    </div>
+
+    <div id="instance-modal" class="modal" style="display: none;">
+        <div class="modal-content large">
+            <div class="modal-header">
+                <h3 id="inst-modal-title">アイテム詳細設定 (個別上書き)</h3>
+                <span class="close-modal" id="close-inst-modal">&times;</span>
+            </div>
+            <div class="modal-body compact-modal-body">
+                <div class="inst-top-bar">
+                    <div class="inst-status-checks">
+                        <label class="check-label"><input type="checkbox" id="inst-is-locked"> このアイテムをロック</label>
+                        <label class="check-label blue"><input type="checkbox" id="inst-is-hidden"> このアイテムを非表示</label>
+                    </div>
+                    <div class="inst-coords-box">
+                        <span class="coord-tag">X:</span>
+                        <input type="number" id="inst-x" step="0.1" class="coord-input">
+                        <span class="coord-tag">Y:</span>
+                        <input type="number" id="inst-y" step="0.1" class="coord-input">
+                    </div>
+                </div>
+
+                <div class="override-grid">
+                    <div class="override-card">
+                        <div class="override-card-header">
+                            <label class="override-toggle">
+                                <input type="checkbox" id="flag-override-shape"> 枠の形
+                            </label>
+                        </div>
+                        <div class="override-card-body">
+                            <select id="inst-shape" class="full-input">
+                                <option value="rectangle">四角形</option>
+                                <option value="circle">円形</option>
+                                <option value="triangle">三角形</option>
+                                <option value="star">星形</option>
+                                <option value="line">一本線</option>
+                            </select>
+                        </div>
+                    </div>
+
+                    <div class="override-card">
+                        <div class="override-card-header">
+                            <label class="override-toggle">
+                                <input type="checkbox" id="flag-override-size"> 幅・高さ(pt)
+                            </label>
+                        </div>
+                        <div class="override-card-body field-inline-pair">
+                            <input type="number" id="inst-width" placeholder="幅" step="1" class="full-input">
+                            <input type="number" id="inst-height" placeholder="高さ" step="1" class="full-input">
+                        </div>
+                    </div>
+
+                    <div class="override-card">
+                        <div class="override-card-header">
+                            <label class="override-toggle">
+                                <input type="checkbox" id="flag-override-autosize"> 自動幅
+                            </label>
+                        </div>
+                        <div class="override-card-body">
+                            <label class="check-label plain">
+                                <input type="checkbox" id="inst-size-auto"> テキストに合わせて自動拡縮
+                            </label>
+                        </div>
+                    </div>
+
+                    <div class="override-card">
+                        <div class="override-card-header">
+                            <label class="override-toggle">
+                                <input type="checkbox" id="flag-override-hasborder"> 枠線描画
+                            </label>
+                        </div>
+                        <div class="override-card-body">
+                            <label class="check-label plain">
+                                <input type="checkbox" id="inst-has-border"> 枠線を描画する
+                            </label>
+                        </div>
+                    </div>
+
+                    <div class="override-card">
+                        <div class="override-card-header">
+                            <label class="override-toggle">
+                                <input type="checkbox" id="flag-override-borderwidth"> 線の太さ(pt)
+                            </label>
+                        </div>
+                        <div class="override-card-body">
+                            <input type="number" id="inst-border-width" step="0.5" min="0" placeholder="太さ(pt)" class="full-input">
+                        </div>
+                    </div>
+
+                    <div class="override-card">
+                        <div class="override-card-header">
+                            <label class="override-toggle">
+                                <input type="checkbox" id="flag-override-bordercolor"> 枠線色
+                            </label>
+                        </div>
+                        <div class="override-card-body">
+                            <div class="color-picker-box">
+                                <input type="color" id="inst-border-color">
+                                <span class="color-hex-text" id="inst-bordercolor-text">#000000</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="override-card">
+                        <div class="override-card-header">
+                            <label class="override-toggle">
+                                <input type="checkbox" id="flag-override-fontsize"> 文字サイズ(pt)
+                            </label>
+                        </div>
+                        <div class="override-card-body">
+                            <input type="number" id="inst-font-size" min="1" step="1" placeholder="サイズ(pt)" class="full-input">
+                        </div>
+                    </div>
+
+                    <div class="override-card">
+                        <div class="override-card-header">
+                            <label class="override-toggle">
+                                <input type="checkbox" id="flag-override-textcolor"> 文字色
+                            </label>
+                        </div>
+                        <div class="override-card-body">
+                            <div class="color-picker-box">
+                                <input type="color" id="inst-text-color">
+                                <span class="color-hex-text" id="inst-textcolor-text">#000000</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="override-card">
+                        <div class="override-card-header">
+                            <label class="override-toggle">
+                                <input type="checkbox" id="flag-override-bgcolor"> 背景色 & 不透明度
+                            </label>
+                        </div>
+                        <div class="override-card-body field-inline-pair">
+                            <div class="color-picker-box" style="flex: 1.2;">
+                                <input type="color" id="inst-bg-color">
+                                <span class="color-hex-text" id="inst-bgcolor-text">#FFFFFF</span>
+                            </div>
+                            <input type="number" id="inst-bg-opacity" min="0" max="1" step="0.1" placeholder="透明度(0-1)" class="full-input" style="flex: 0.8;">
+                        </div>
+                    </div>
+
+                    <div class="override-card">
+                        <div class="override-card-header">
+                            <label class="override-toggle">
+                                <input type="checkbox" id="flag-override-zindex"> 優先度 (zIndex)
+                            </label>
+                        </div>
+                        <div class="override-card-body">
+                            <input type="number" id="inst-zindex" step="1" placeholder="zIndex" class="full-input">
+                        </div>
+                    </div>
+
+                    <div class="override-card full-width" id="inst-line-row">
+                        <div class="override-card-header">
+                            <label class="override-toggle">
+                                <input type="checkbox" id="flag-override-caps"> 端点形状 (一本線のみ)
+                            </label>
+                        </div>
+                        <div class="override-card-body field-inline-pair">
+                            <select id="inst-startcap" class="full-input">
+                                <option value="none">始点: なし</option>
+                                <option value="arrow">始点: 矢印</option>
+                                <option value="circle">始点: 丸</option>
+                            </select>
+                            <select id="inst-endcap" class="full-input">
+                                <option value="none">終点: なし</option>
+                                <option value="arrow">終点: 矢印</option>
+                                <option value="circle">終点: 丸</option>
+                            </select>
+                        </div>
+                    </div>
+
+                    <div class="override-card full-width" id="inst-capsize-row">
+                        <div class="override-card-header">
+                            <label class="override-toggle">
+                                <input type="checkbox" id="flag-override-capsize"> 端点サイズ(pt)
+                            </label>
+                        </div>
+                        <div class="override-card-body">
+                            <input type="number" id="inst-cap-size" min="1" step="0.5" placeholder="端点サイズ" class="full-input">
+                        </div>
+                    </div>
+
+                    <div class="override-card full-width">
+                        <div class="override-card-header">
+                            <label class="override-toggle">
+                                <input type="checkbox" id="flag-override-text"> テキスト個別上書き
+                            </label>
+                        </div>
+                        <div class="override-card-body">
+                            <textarea id="inst-text" rows="2" placeholder="グループ設定の基本テキストを個別上書きします" class="full-input"></textarea>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button id="btn-modal-cancel" class="btn">キャンセル</button>
+                <button id="btn-modal-save" class="btn primary">保存して反映</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="data-modal" class="modal" style="display: none;">
+        <div class="modal-content large">
+            <div class="modal-header">
+                <h3>データ管理</h3>
+                <span class="close-modal" id="close-data-modal">&times;</span>
+            </div>
+
+            <div class="modal-tabs">
+                <button class="modal-tab-btn active" id="tab-btn-history">保存履歴</button>
+                <button class="modal-tab-btn" id="tab-btn-json">JSON入出力</button>
+            </div>
+
+            <div class="modal-body" style="max-height: 70vh; overflow-y: auto;">
+                <div id="tab-content-history" class="tab-pane active">
+                    <div class="history-top-bar">
+                        <span class="history-hint">ブラウザ内に保持されているバージョン一覧</span>
+                        <button id="btn-history-save-current" class="btn primary small">現在の状態を新規保存</button>
+                    </div>
+                    <div id="modal-project-history-list" class="history-cards-scroll"></div>
+                </div>
+
+                <div id="tab-content-json" class="tab-pane">
+                    <div class="backup-box">
+                        <span class="backup-label">完全ファイル保存:</span>
+                        <button id="btn-backup-file" class="btn primary small">PCへ退避</button>
+                        <button id="btn-restore-file-trigger" class="btn danger small">PCから復元</button>
+                        <input type="file" id="restore-file-input" accept=".json" hidden>
+                    </div>
+
+                    <div class="form-group" style="margin-top: 14px;">
+                        <label>テキストスコープ（配置オブジェクト）</label>
+                        <div class="radio-row">
+                            <label class="radio-label"><input type="radio" name="data-scope" value="page" checked> 現在のページのみ</label>
+                            <label class="radio-label"><input type="radio" name="data-scope" value="all"> 全ページ</label>
+                        </div>
+                    </div>
+                    <div class="form-group">
+                        <label>JSONデータテキスト</label>
+                        <textarea id="data-json-textarea" spellcheck="false" class="json-textarea"></textarea>
+                    </div>
+                    <div class="json-actions">
+                        <button id="btn-data-copy" class="btn">コピー</button>
+                        <button id="btn-data-export" class="btn highlight">JSON保存</button>
+                        <button id="btn-data-import" class="btn danger">このテキストで上書き復元</button>
+                    </div>
+                </div>
+            </div>
+
+            <div class="modal-footer">
+                <button id="btn-data-modal-close" class="btn">閉じる</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="help-modal" class="modal" style="display: none;">
+        <div class="modal-content large help-modal-content">
+            <div class="modal-header">
+                <h3>操作ヘルプ</h3>
+                <span class="close-modal" id="close-help-modal">&times;</span>
+            </div>
+            <div class="modal-body help-body">
+                <h4>ショートカット</h4>
+                <table class="help-table">
+                    <tbody>
+                        <tr><th>画面切替</th><td>ヘッダー「配置」／「切り抜き・レイヤー」</td></tr>
+                        <tr><th>選択 / 登録</th><td>配置画面の「選択」「登録」ボタン</td></tr>
+                        <tr><th>元に戻す</th><td>Ctrl+Z（Mac は Cmd+Z）</td></tr>
+                        <tr><th>やり直し</th><td>Ctrl+Y または Ctrl+Shift+Z</td></tr>
+                        <tr><th>微調整</th><td>矢印キー（移動量は右サイドバー）</td></tr>
+                        <tr><th>削除</th><td>Delete / Backspace（入力中は除く）</td></tr>
+                        <tr><th>複数選択</th><td>Shift+クリック、または空欄ドラッグ</td></tr>
+                        <tr><th>詳細設定</th><td>オブジェクトをダブルクリック</td></tr>
+                        <tr><th>閉じる / 選択解除</th><td>Esc</td></tr>
+                    </tbody>
+                </table>
+
+                <details open>
+                    <summary>基本の流れ</summary>
+                    <ol>
+                        <li>ヘッダーで「配置」または「切り抜き・レイヤー」画面を選ぶ。</li>
+                        <li>配置画面: 左の「新規」でグループを作り、「登録」でオブジェクトを置く。</li>
+                        <li>切り抜き・レイヤー画面: 帳票枠の追加／移動と PDF レイヤーの表示切替。</li>
+                        <li>「保存」でブラウザにバージョン保存。「PDF出力」で完成稿を書き出す。</li>
+                        <li>ZIP は解凍し、<code>index.html</code> をダブルクリックして開く（1ファイルにまとめてある）。</li>
+                    </ol>
+                </details>
+
+                <details>
+                    <summary>PDF・保存・出力</summary>
+                    <ul>
+                        <li><strong>PDF読込</strong>: 新しい下絵を開く。配置がある場合は残すか消すか確認する。</li>
+                        <li><strong>PDF差替</strong>: 下絵だけ差し替え、配置は残す（元PDFの更新向け）。</li>
+                        <li><strong>保存</strong>: IndexedDB にタイムスタンプ付きの新規バージョンとして保存する。</li>
+                        <li><strong>データ管理</strong>: 履歴の復元/削除、完全ファイル退避、JSON入出力。</li>
+                        <li><strong>PDF出力</strong>: 下絵PDF（全ページ・指定範囲の切り出しとも）は常にオブジェクトのまま出す。セレクトは番号の重ね方だけ（番号もオブジェクト／番号は画像）。出力対象は全ページ／指定範囲。「表示レイヤーのみ」をオンにすると、非表示レイヤーは出さない。</li>
+                        <li><strong>切り抜き・レイヤー</strong>: 配置とは別画面。帳票サイズの枠で抽出、PDFレイヤーの表示／非表示。</li>
+                    </ul>
+                </details>
+
+                <details>
+                    <summary>グループとオブジェクト</summary>
+                    <ul>
+                        <li>グループは見た目の原版。設定を変えると所属オブジェクトへ一括反映する（個別上書きは除く）。</li>
+                        <li>グループのロック中は、そのグループへの配置・移動・リサイズができない。</li>
+                        <li>右リストのドラッグで連番順（order）を変える。</li>
+                        <li>連番はテキストの <code>{auto}</code> / <code>{auto:000}</code> / <code>{auto:A-Z}</code> / <code>{auto:A01-A10}</code>。</li>
+                    </ul>
+                </details>
+            </div>
+            <div class="modal-footer">
+                <button id="btn-help-modal-close" class="btn">閉じる</button>
+            </div>
+        </div>
+    </div>
+
+    <script src="./vendor/pdf-lib.min.js"></script>
+    <script src="./vendor/fontkit.umd.min.js"></script>
+    <script src="./vendor/pdf.min.js"></script>
+    <script src="./vendor/pdf.worker.min.js"></script>
+    <script src="./vendor/Sortable.min.js"></script>
+    <script>
+        (function () {
+            if (typeof pdfjsLib === 'undefined') return;
+            if (typeof pdfjsWorker !== 'undefined' && pdfjsWorker.WorkerMessageHandler) {
+                pdfjsLib.GlobalWorkerOptions.workerSrc = URL.createObjectURL(new Blob([''], { type: 'text/javascript' }));
+                if (pdfjsLib.PDFWorker && pdfjsLib.PDFWorker.prototype) {
+                    pdfjsLib.PDFWorker.prototype._initialize = function () {
+                        this._setupFakeWorker();
+                    };
+                }
+            } else {
+                pdfjsLib.GlobalWorkerOptions.workerSrc = './vendor/pdf.worker.min.js';
+            }
+        })();
+    </script>
+    <script src="./EditorModels.js"></script>
+    <script src="./DBManager.js"></script>
+    <script src="./CoordinateConverter.js"></script>
+    <script src="./PdfLayoutTools.js"></script>
+    <script src="./PdfNativeExport.js"></script>
+    <script src="./AppCore.js"></script>
+    <script src="./main.js"></script>
+</body>
+</html>

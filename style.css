@@ -397,14 +397,35 @@ body, html {
 }
 #canvas-wrapper {
     position: relative;
+    display: inline-block;
+    line-height: 0;
     box-shadow: 0 8px 24px rgba(0, 0, 0, 0.28);
     background-color: white;
-    margin: auto;
+    margin: 0 auto;
     transform-origin: top left;
+    flex: 0 0 auto;
+    overflow: hidden;
+    min-width: 40px;
+    min-height: 40px;
 }
-#pdf-render-canvas, #interactive-layer-canvas { display: block; position: absolute; top: 0; left: 0; }
-#pdf-render-canvas { z-index: 1; }
-#interactive-layer-canvas { z-index: 2; cursor: default; }
+/* 下絵は 1px クリップのバッファ。画面外配置だと親が横スクロールしてプレビューが消える */
+#pdf-render-canvas {
+    position: absolute;
+    left: 0;
+    top: 0;
+    width: 1px;
+    height: 1px;
+    pointer-events: none;
+    opacity: 0;
+    z-index: 0;
+}
+#interactive-layer-canvas {
+    display: block;
+    position: relative;
+    z-index: 2;
+    cursor: default;
+    background-color: #ffffff;
+}
 
 .move-step-panel {
     margin-top: 8px;

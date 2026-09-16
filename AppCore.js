@@ -27,9 +27,9 @@ class PdfEditorCore {
         this.workspace = 'place';
 
         this.pdfCanvas = document.getElementById('pdf-render-canvas');
-        this.pdfCtx = this.pdfCanvas.getContext('2d');
+        this.pdfCtx = this.pdfCanvas.getContext('2d', { alpha: false, willReadFrequently: true });
         this.layerCanvas = document.getElementById('interactive-layer-canvas');
-        this.layerCtx = this.layerCanvas.getContext('2d');
+        this.layerCtx = this.layerCanvas.getContext('2d', { alpha: false });
         this.canvasWrapper = document.getElementById('canvas-wrapper');
 
         this.currentRenderTask = null;    
@@ -44,14 +44,18 @@ class PdfEditorCore {
             await this.db.open(); 
         } catch (error) { 
             console.error("DB初期化失敗:", error); 
-        } 
+        }
+        await this.setZoom(this.coordConverter.zoomLevel || 1.0);
     }
 
     pdfJsDocumentOptions(data) {
         const opts = {
             data: data,
             cMapUrl: 'https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/cmaps/',
-            cMapPacked: true
+            cMapPacked: true,
+            standardFontDataUrl: 'https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/standard_fonts/',
+            isOffscreenCanvasSupported: false,
+            useSystemFonts: true
         };
         if (typeof location !== 'undefined' && location.protocol === 'file:') {
             opts.disableRange = true;
@@ -272,8 +276,6 @@ class PdfEditorCore {
                     const viewportH = 842 * this.coordConverter.zoomLevel;
                     this.pdfCanvas.width = viewportW;
                     this.pdfCanvas.height = viewportH;
-                    this.pdfCanvas.style.width = `${viewportW}px`;
-                    this.pdfCanvas.style.height = `${viewportH}px`;
                     this.pdfCtx.fillStyle = "#ffffff";
                     this.pdfCtx.fillRect(0, 0, viewportW, viewportH);
                     this.layerCanvas.width = viewportW;
@@ -321,14 +323,16 @@ class PdfEditorCore {
             const px = PdfLayoutTools.floorCanvasSize(viewport.width, viewport.height);
             this.pdfCanvas.width = px.width;
             this.pdfCanvas.height = px.height;
-            this.pdfCanvas.style.width = `${viewport.width}px`;
-            this.pdfCanvas.style.height = `${viewport.height}px`;
             this.layerCanvas.width = px.width;
             this.layerCanvas.height = px.height;
             this.layerCanvas.style.width = `${viewport.width}px`;
             this.layerCanvas.style.height = `${viewport.height}px`;
             this.canvasWrapper.style.width = `${viewport.width}px`;
             this.canvasWrapper.style.height = `${viewport.height}px`;
+
+            this.pdfCtx.setTransform(1, 0, 0, 1, 0, 0);
+            this.pdfCtx.fillStyle = '#ffffff';
+            this.pdfCtx.fillRect(0, 0, this.pdfCanvas.width, this.pdfCanvas.height);
 
             const renderContext = {
                 canvasContext: this.pdfCtx,
@@ -349,6 +353,7 @@ class PdfEditorCore {
                 return;
             }
             console.error("PDFレンダリングエラー:", error);
+            alert("PDFは開けましたが画面に描けませんでした: " + (error && error.message ? error.message : error));
         }
     }
 
@@ -362,8 +367,6 @@ class PdfEditorCore {
             const viewportH = 842 * this.coordConverter.zoomLevel;
             this.pdfCanvas.width = viewportW;
             this.pdfCanvas.height = viewportH;
-            this.pdfCanvas.style.width = `${viewportW}px`;
-            this.pdfCanvas.style.height = `${viewportH}px`;
             this.pdfCtx.fillStyle = "#ffffff";
             this.pdfCtx.fillRect(0, 0, viewportW, viewportH);
             this.layerCanvas.width = viewportW;
@@ -512,7 +515,23 @@ class PdfEditorCore {
     }
 
     renderInteractiveLayer() {
-        this.layerCtx.clearRect(0, 0, this.layerCanvas.width, this.layerCanvas.height);
+        const w = this.layerCanvas.width;
+        const h = this.layerCanvas.height;
+        this.layerCtx.setTransform(1, 0, 0, 1, 0, 0);
+        this.layerCtx.globalCompositeOperation = 'copy';
+        // 下絵キャンバスは非表示バッファ。表示面へ不透明コピーしてからオブジェクトを描く
+        if (this.pdfCanvas && this.pdfCanvas.width > 0 && this.pdfCanvas.height > 0) {
+            try {
+                this.layerCtx.drawImage(this.pdfCanvas, 0, 0, w, h);
+            } catch (e) {
+                this.layerCtx.fillStyle = '#ffffff';
+                this.layerCtx.fillRect(0, 0, w, h);
+            }
+        } else {
+            this.layerCtx.fillStyle = '#ffffff';
+            this.layerCtx.fillRect(0, 0, w, h);
+        }
+        this.layerCtx.globalCompositeOperation = 'source-over';
 
         this.buildAutoTextIndexMap();
 

@@ -53,11 +53,19 @@ function decodePdfStreams(raw) {
 
 async function main() {
     const appCoreSrc = readFileSync(join(root, 'AppCore.js'), 'utf8');
+    const styleSrc = readFileSync(join(root, 'style.css'), 'utf8');
     const indexSrc = readFileSync(join(root, 'index.html'), 'utf8');
-    assert(indexSrc.includes('src="./vendor/pdf-lib.min.js"'), 'pdf-lib は同梱');
-    assert(indexSrc.includes('src="./vendor/pdf.worker.min.js"'), 'pdf.worker は同梱');
-    assert(!indexSrc.includes('unpkg.com'), 'ページ読込で unpkg を使わない');
-    assert(indexSrc.includes('_setupFakeWorker'), 'file:// では pdf.js をメインスレッドで動かす');
+    const indexDevSrc = readFileSync(join(root, 'index.dev.html'), 'utf8');
+    assert(/#interactive-layer-canvas \{[\s\S]*?position:\s*relative/.test(styleSrc), '表示キャンバスは流れの中でサイズを持つ');
+    assert(/#canvas-wrapper \{[\s\S]*?overflow:\s*hidden/.test(styleSrc), 'ラッパーは下絵バッファをクリップする');
+    assert(/#pdf-render-canvas \{[\s\S]*?width:\s*1px/.test(styleSrc), '下絵キャンバスは1pxバッファ');
+    assert(indexSrc.includes('standalone-file-origin'), '配布用 index.html は単一ファイル');
+    assert(!indexSrc.includes('<script src="./vendor/pdf-lib.min.js">'), '配布用は pdf-lib をインライン化');
+    assert(!indexSrc.includes('<script src="./AppCore.js">'), '配布用は AppCore をインライン化');
+    assert(indexSrc.includes('createMemoryDatabase'), 'file:// 用メモリDBが入っている');
+    assert(indexSrc.includes('_setupFakeWorker'), 'pdf.js はメインスレッドで動かす');
+    assert(indexDevSrc.includes('id="pdf-export-mode-select"'), '開発用 HTML に出力方式がある');
+    assert(/toolbar-cluster">\s*<span class="toolbar-label">作業<\/span>/.test(indexDevSrc), '作業ツールバーの div が閉じすぎていない');
     assert(indexSrc.includes('id="pdf-export-mode-select"'), '出力方式セレクトがある');
     assert(indexSrc.includes('value="image"') && indexSrc.includes('value="vector"'), '画像／オブジェクトの選択肢がある');
     assert(indexSrc.includes('番号もオブジェクト') && indexSrc.includes('番号は画像'), '番号の重ね方の文言がある');
@@ -71,8 +79,11 @@ async function main() {
     assert(appCoreSrc.includes('overlayVectorObjects'), 'オブジェクト描画経路がある');
     assert(appCoreSrc.includes('if (this.basePdfBytes)'), '切り出しでも下絵を常に embedPdf する');
     assert(appCoreSrc.includes('clipPageAndDrawEmbedded'), '切り出しは Form XObject をクリップ描画する');
+    assert(appCoreSrc.includes('drawImage(this.pdfCanvas'), '重ねキャンバスに下絵をコピーする');
     const dbSrc = readFileSync(join(root, 'DBManager.js'), 'utf8');
     assert(dbSrc.includes('createMemoryDatabase'), 'file:// ではメモリDBを使う');
+    const mainSrc = readFileSync(join(root, 'main.js'), 'utf8');
+    assert(mainSrc.includes('const deltaScreenX = currentX - dragStartMouse.x'), 'ドラッグ移動に deltaScreenX がある');
 
     const tri = PdfNativeExport.buildTriangleSvgPath(10, 20, 100, 40);
     assert(tri.includes('M 60 60'), '三角形の頂点は上辺中央 (PDF y 上向き)');

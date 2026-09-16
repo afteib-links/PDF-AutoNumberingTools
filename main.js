@@ -5,6 +5,24 @@
 document.addEventListener('DOMContentLoaded', async () => {
     const core = new PdfEditorCore();
     await core.init();
+    window.pdfEditorCore = core;
+
+    const sampleUrl = new URLSearchParams(location.search).get('previewSample');
+    if (sampleUrl === 'tests/preview-sample.pdf' || sampleUrl === './tests/preview-sample.pdf') {
+        try {
+            const res = await fetch(sampleUrl);
+            const file = new File([await res.arrayBuffer()], 'preview-sample.pdf', { type: 'application/pdf' });
+            await core.loadPdfFile(file);
+            const x = Math.max(0, Math.floor(core.layerCanvas.width / 2));
+            const y = Math.max(0, Math.floor(core.layerCanvas.height / 2));
+            const pixel = Array.from(core.layerCtx.getImageData(x, y, 1, 1).data);
+            document.documentElement.dataset.previewPixel = pixel.join(',');
+            window.__previewPixel = pixel;
+        } catch (err) {
+            console.error('プレビュー検証用PDFの読込に失敗:', err);
+            document.documentElement.dataset.previewPixel = 'error';
+        }
+    }
 
     let currentMode = 'select';
     let currentWorkspace = 'place';
@@ -1472,6 +1490,7 @@ document.addEventListener('DOMContentLoaded', async () => {
             layerCanvas.style.cursor = currentMode === 'draw' ? 'crosshair' : 'default';
             return;
         }
+        const deltaScreenX = currentX - dragStartMouse.x;
         const deltaScreenY = currentY - dragStartMouse.y;
         const deltaPtX = deltaScreenX / (core.coordConverter.zoomLevel * core.coordConverter.ptToPxRatio);
         const deltaPtY = -deltaScreenY / (core.coordConverter.zoomLevel * core.coordConverter.ptToPxRatio);
