@@ -40,6 +40,9 @@ class PdfEditorCore {
     }
 
     async init() { 
+        if (typeof location !== 'undefined' && location.protocol === 'file:') {
+            return;
+        }
         try { 
             await this.db.open(); 
         } catch (error) { 
