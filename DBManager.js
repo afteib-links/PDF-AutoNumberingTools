@@ -1,11 +1,9 @@
 /**
  * DBManager.js
- * ローカル永続化。file:// では IndexedDB が Edge でフレーム警告を出すためメモリに保持する。
+ * IndexedDB で永続化。開けない環境（一部の file://）は localStorage に退避する。
  */
 if (typeof window.DBManager === 'undefined') {
-    function isFileProtocol() {
-        return typeof location !== 'undefined' && location.protocol === 'file:';
-    }
+    const LS_DB_KEY = 'PdfEditorDB_local_v1';
 
     function requestResult(result) {
         const req = { result: result, error: null, onsuccess: null, onerror: null };
@@ -15,12 +13,87 @@ if (typeof window.DBManager === 'undefined') {
         return req;
     }
 
-    function createMemoryDatabase() {
+    function u8ToB64(bytes) {
+        if (!bytes) return '';
+        const u8 = bytes instanceof Uint8Array ? bytes : new Uint8Array(bytes);
+        let bin = '';
+        const step = 0x8000;
+        for (let i = 0; i < u8.length; i += step) {
+            bin += String.fromCharCode.apply(null, u8.subarray(i, Math.min(i + step, u8.length)));
+        }
+        return btoa(bin);
+    }
+
+    function b64ToU8(b64) {
+        if (!b64) return new Uint8Array(0);
+        const bin = atob(b64);
+        const out = new Uint8Array(bin.length);
+        for (let i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i);
+        return out;
+    }
+
+    function snapshotTables(tables) {
+        const out = {};
+        Object.keys(tables).forEach(function (name) {
+            const t = tables[name];
+            const rows = [];
+            t.rows.forEach(function (row, key) {
+                const copy = Object.assign({}, row);
+                if (copy.pdfBytes) {
+                    copy.pdfBytesB64 = u8ToB64(copy.pdfBytes);
+                    delete copy.pdfBytes;
+                }
+                rows.push([key, copy]);
+            });
+            out[name] = { nextId: t.nextId || 1, rows: rows };
+        });
+        return out;
+    }
+
+    function restoreTables(tables, snap) {
+        if (!snap) return;
+        Object.keys(tables).forEach(function (name) {
+            const src = snap[name];
+            if (!src) return;
+            tables[name].nextId = src.nextId || 1;
+            tables[name].rows = new Map();
+            (src.rows || []).forEach(function (pair) {
+                const key = pair[0];
+                const copy = Object.assign({}, pair[1]);
+                if (copy.pdfBytesB64) {
+                    copy.pdfBytes = b64ToU8(copy.pdfBytesB64);
+                    delete copy.pdfBytesB64;
+                }
+                tables[name].rows.set(key, copy);
+            });
+        });
+    }
+
+    function persistTables(tables) {
+        if (typeof localStorage === 'undefined') return false;
+        try {
+            localStorage.setItem(LS_DB_KEY, JSON.stringify(snapshotTables(tables)));
+            return true;
+        } catch (e) {
+            console.warn('localStorage への履歴保存に失敗:', e);
+            return false;
+        }
+    }
+
+    function createMemoryDatabase(persist) {
         const tables = {
             projects: { keyPath: 'id', autoIncrement: true, nextId: 1, rows: new Map() },
             project_blobs: { keyPath: 'projectId', autoIncrement: false, rows: new Map() },
             project_data: { keyPath: 'projectId', autoIncrement: false, rows: new Map() }
         };
+
+        if (persist && typeof localStorage !== 'undefined') {
+            try {
+                restoreTables(tables, JSON.parse(localStorage.getItem(LS_DB_KEY) || 'null'));
+            } catch (e) {
+                console.warn('localStorage 履歴の読込に失敗:', e);
+            }
+        }
 
         function makeStore(table, tx) {
             return {
@@ -85,6 +158,7 @@ if (typeof window.DBManager === 'undefined') {
                     tx._pending--;
                     if (tx._pending <= 0 && !tx._closed) {
                         tx._closed = true;
+                        if (persist) persistTables(tables);
                         if (typeof tx.oncomplete === 'function') tx.oncomplete();
                     }
                 };
@@ -92,6 +166,7 @@ if (typeof window.DBManager === 'undefined') {
                 queueMicrotask(function () {
                     if (tx._pending === 0 && !tx._closed) {
                         tx._closed = true;
+                        if (persist) persistTables(tables);
                         if (typeof tx.oncomplete === 'function') tx.oncomplete();
                     }
                 });
@@ -117,9 +192,9 @@ if (typeof window.DBManager === 'undefined') {
                 this.db = null;
             }
 
-            if (isFileProtocol()) {
+            if (typeof indexedDB === 'undefined') {
                 this.usesMemory = true;
-                this.db = createMemoryDatabase();
+                this.db = createMemoryDatabase(true);
                 return this.db;
             }
 
@@ -127,9 +202,9 @@ if (typeof window.DBManager === 'undefined') {
                 const request = indexedDB.open(this.dbName, this.dbVersion);
 
                 request.onerror = (e) => {
-                    console.error("IndexedDBオープンエラー:", e.target.error);
+                    console.warn("IndexedDBを開けないため localStorage に保存します:", e.target.error);
                     this.usesMemory = true;
-                    this.db = createMemoryDatabase();
+                    this.db = createMemoryDatabase(true);
                     resolve(this.db);
                 };
 
@@ -139,6 +214,7 @@ if (typeof window.DBManager === 'undefined') {
 
                 request.onsuccess = (e) => {
                     this.db = e.target.result;
+                    this.usesMemory = false;
 
                     const requiredStores = ["projects", "project_blobs", "project_data"];
                     const hasAll = requiredStores.every(s => this.db.objectStoreNames.contains(s));
@@ -177,8 +253,11 @@ if (typeof window.DBManager === 'undefined') {
         }
 
         async recreateDatabase() {
-            if (isFileProtocol() || this.usesMemory) {
-                this.db = createMemoryDatabase();
+            if (this.usesMemory || typeof indexedDB === 'undefined') {
+                try {
+                    if (typeof localStorage !== 'undefined') localStorage.removeItem(LS_DB_KEY);
+                } catch (e) { /* ignore */ }
+                this.db = createMemoryDatabase(true);
                 this.usesMemory = true;
                 return this.db;
             }
@@ -192,7 +271,11 @@ if (typeof window.DBManager === 'undefined') {
                     this.dbVersion = Math.max(this.dbVersion + 1, 7);
                     this.open().then(resolve).catch(reject);
                 };
-                delReq.onerror = () => reject(delReq.error);
+                delReq.onerror = () => {
+                    this.usesMemory = true;
+                    this.db = createMemoryDatabase(true);
+                    resolve(this.db);
+                };
             });
         }
     };

@@ -26,10 +26,18 @@ document.addEventListener('DOMContentLoaded', async () => {
 
     let currentMode = 'select';
     let currentWorkspace = 'place';
+    let workspaceDirty = false;
+    let lastSaveLabel = '';
+    let autoSaveTimer = null;
+    let appSettings = (typeof WorkspaceData !== 'undefined') ? WorkspaceData.loadSettings() : { autoSaveEnabled: true, autoSaveMinutes: 5, defaultGroup: {} };
 
     const undoStack = [];
     const redoStack = [];
     const maxStack = 40;
+
+    function markDirty() {
+        workspaceDirty = true;
+    }
 
     function pushHistory() {
         undoStack.push({
@@ -40,6 +48,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         if (undoStack.length > maxStack) undoStack.shift();
         redoStack.length = 0;
         updateHistoryButtons();
+        markDirty();
     }
 
     function updateHistoryButtons() {
@@ -92,6 +101,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     // 左サイドバー：グループマスター & インライン設定パネル
     const groupCardsContainer = document.getElementById('group-cards-container');
     const btnAddGroup = document.getElementById('btn-add-group');
+    const btnSaveGroupAsDefault = document.getElementById('btn-save-group-as-default');
     const inlineGroupPanel = document.getElementById('group-inline-panel');
 
     const groupNameInput = document.getElementById('group-name-input');
@@ -130,6 +140,8 @@ document.addEventListener('DOMContentLoaded', async () => {
     const moveStepNumber = document.getElementById('move-step-number');
     const moveStepSlider = document.getElementById('move-step-slider');
     const instanceSearch = document.getElementById('instance-search');
+    const btnCopyInstances = document.getElementById('btn-copy-instances');
+    const btnPasteInstances = document.getElementById('btn-paste-instances');
 
     // インスタンス詳細モーダル要素
     const instanceModal = document.getElementById('instance-modal');
@@ -198,6 +210,8 @@ document.addEventListener('DOMContentLoaded', async () => {
     const tabBtnHistory = document.getElementById('tab-btn-history');
     const tabBtnJson = document.getElementById('tab-btn-json');
     const tabContentHistory = document.getElementById('tab-content-history');
+    const autosaveEnabledInput = document.getElementById('autosave-enabled');
+    const autosaveMinutesInput = document.getElementById('autosave-minutes');
     const tabContentJson = document.getElementById('tab-content-json');
     const btnHistorySaveCurrent = document.getElementById('btn-history-save-current');
     const modalProjectHistoryList = document.getElementById('modal-project-history-list');
@@ -343,7 +357,7 @@ document.addEventListener('DOMContentLoaded', async () => {
             : (currentMode === 'draw' ? '登録（クリックで配置）' : '選択');
         const zoom = Math.round(core.coordConverter.zoomLevel * 100);
         const cropN = core.cropRegions.length;
-        appStatus.textContent = `${workspaceLabel} | ${modeLabel} | 選択 ${core.selectedInstanceIds.size}件 | 抽出 ${cropN} | ${zoom}%`;
+        appStatus.textContent = `${workspaceLabel} | ${modeLabel} | 選択 ${core.selectedInstanceIds.size}件 | 抽出 ${cropN} | ${zoom}%${lastSaveLabel ? ' | ' + lastSaveLabel : ''}`;
     }
 
     function setWorkspace(ws) {
@@ -469,6 +483,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         }
         const success = await core.loadPdfFile(file);
         if (success) {
+            markDirty();
             updatePageIndicator();
             renderGroupedAccordion();
             renderPdfLayerList();
@@ -484,6 +499,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         if (!file) return;
         const success = await core.replacePdfFile(file);
         if (success) {
+            markDirty();
             updatePageIndicator();
             renderPdfLayerList();
             core.renderInteractiveLayer();
@@ -518,20 +534,26 @@ document.addEventListener('DOMContentLoaded', async () => {
     btnZoomOut.addEventListener('click', () => applyZoom(Math.round(core.coordConverter.zoomLevel * 100) - 10));
     zoomInput.addEventListener('change', (e) => applyZoom(parseInt(e.target.value, 10) || 100));
 
-    const executeSaveVersion = async () => {
+    const executeSaveVersion = async (opts) => {
+        const silent = !!(opts && opts.silent);
+        const saveKind = (opts && opts.saveKind) || 'manual';
         const baseName = projectNameInput.value.trim() || "作業";
         try {
-            const saved = await core.saveToDatabase(baseName);
-            projectNameInput.value = saved.name;
-            alert(`バージョン履歴として保存しました:\n${saved.name}`);
-            
+            const saved = await core.saveToDatabase(baseName, { saveKind: saveKind });
+            projectNameInput.value = saved.workName || baseName;
+            workspaceDirty = false;
+            lastSaveLabel = (saveKind === 'auto' ? '自動保存 ' : '保存 ') + new Date().toLocaleTimeString();
+            updateStatusBar();
             const isModalVisible = window.getComputedStyle(dataModal).display !== 'none';
             if (isModalVisible) {
                 renderModalHistoryList();
             }
+            if (!silent) {
+                alert(`バージョン履歴として保存しました:\n${saved.workName}（${saved.name}）`);
+            }
         } catch (err) {
             console.error("保存失敗詳細:", err);
-            alert("保存失敗: " + (err.message || err));
+            if (!silent) alert("保存失敗: " + (err.message || err));
         }
     };
 
@@ -781,14 +803,13 @@ document.addEventListener('DOMContentLoaded', async () => {
     btnAddGroup.addEventListener('click', () => {
         pushHistory();
         const newId = core.groups.length > 0 ? Math.max(...core.groups.map(g => g.id)) + 1 : 1;
-        const newGroup = Object.assign({}, GroupModel, {
+        const tmpl = (typeof WorkspaceData !== 'undefined')
+            ? Object.assign({}, WorkspaceData.loadSettings().defaultGroup)
+            : {};
+        const newGroup = Object.assign({}, GroupModel, tmpl, {
             id: newId,
             projectId: core.currentProjectId || 1,
-            name: `新規グループ ${newId}`,
-            shape: 'rectangle',
-            width: 100,
-            height: 40,
-            defaultText: "項目:{auto:000}"
+            name: (tmpl.name && tmpl.name !== '新規グループ') ? tmpl.name : `新規グループ ${newId}`
         });
         core.groups.push(newGroup);
         showInlineGroupPanel(newId);
@@ -816,6 +837,25 @@ document.addEventListener('DOMContentLoaded', async () => {
         core.renderInteractiveLayer();
         renderGroupedAccordion();
         updateStatusBar();
+    }
+
+    if (btnSaveGroupAsDefault) {
+        btnSaveGroupAsDefault.addEventListener('click', () => {
+            const g = core.groups.find(item => item.id === activeGroupId);
+            if (!g) {
+                alert('先にグループを選んでください。');
+                return;
+            }
+            const tmpl = WorkspaceData.defaultGroupTemplate();
+            Object.keys(tmpl).forEach((key) => {
+                if (Object.prototype.hasOwnProperty.call(g, key) && key !== 'id' && key !== 'projectId') {
+                    tmpl[key] = g[key];
+                }
+            });
+            appSettings.defaultGroup = tmpl;
+            WorkspaceData.saveSettings(appSettings);
+            alert('現在のグループ設定を初期グループにしました。新規グループに使われます。');
+        });
     }
 
     const syncGroupFromInputs = () => {
@@ -1014,6 +1054,56 @@ document.addEventListener('DOMContentLoaded', async () => {
     }
 
     instanceSearch.addEventListener('input', renderGroupedAccordion);
+
+    function copySelectedInstances() {
+        if (typeof WorkspaceData === 'undefined') return;
+        if (core.selectedInstanceIds.size === 0) {
+            alert('コピーするオブジェクトを選択してください。');
+            return;
+        }
+        const payload = WorkspaceData.buildCopyPayload(core.groups, core.instances, core.selectedInstanceIds);
+        const text = JSON.stringify(payload);
+        window._pdfObjectClipboard = text;
+        if (navigator.clipboard && navigator.clipboard.writeText) {
+            navigator.clipboard.writeText(text).catch(() => {});
+        }
+        lastSaveLabel = `コピー ${payload.instances.length}件`;
+        updateStatusBar();
+    }
+
+    async function pasteCopiedInstances() {
+        if (typeof WorkspaceData === 'undefined') return;
+        let text = window._pdfObjectClipboard || '';
+        if (navigator.clipboard && navigator.clipboard.readText) {
+            try {
+                const clip = await navigator.clipboard.readText();
+                if (clip && clip.indexOf('pdf-autonumbering-objects') !== -1) text = clip;
+            } catch (e) { /* 権限なし時は内部クリップボード */ }
+        }
+        const payload = WorkspaceData.parseCopyPayload(text);
+        if (!payload) {
+            alert('貼り付けできるオブジェクトデータがありません。');
+            return;
+        }
+        const mapped = WorkspaceData.cloneForPaste(
+            payload,
+            core.groups,
+            core.instances,
+            core.currentPageNum - 1,
+            WorkspaceData.PASTE_OFFSET_PT
+        );
+        pushHistory();
+        mapped.groups.forEach((g) => core.groups.push(g));
+        mapped.instances.forEach((inst) => core.instances.push(inst));
+        core.selectedInstanceIds = new Set(mapped.instances.map((i) => i.id));
+        renderGroupCards();
+        core.renderInteractiveLayer();
+        renderGroupedAccordion();
+        updateStatusBar();
+    }
+
+    if (btnCopyInstances) btnCopyInstances.addEventListener('click', copySelectedInstances);
+    if (btnPasteInstances) btnPasteInstances.addEventListener('click', () => { pasteCopiedInstances(); });
 
     function bindOverridePair(checkbox, inputEl, parentCard) {
         const updateState = () => {
@@ -1806,6 +1896,16 @@ document.addEventListener('DOMContentLoaded', async () => {
             deleteSelectedInstances();
             return;
         }
+        if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'c') {
+            e.preventDefault();
+            copySelectedInstances();
+            return;
+        }
+        if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'v') {
+            e.preventDefault();
+            pasteCopiedInstances();
+            return;
+        }
         if (core.selectedInstanceIds.size === 0) return;
         if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(e.key)) {
             e.preventDefault();
@@ -1873,36 +1973,68 @@ document.addEventListener('DOMContentLoaded', async () => {
             const req = store.getAll();
             req.onsuccess = () => {
                 const items = req.result || [];
-                items.sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0));
+                const grouped = WorkspaceData.groupProjectsByWorkName(items);
 
-                if (items.length === 0) {
+                if (grouped.length === 0) {
                     modalProjectHistoryList.innerHTML = '<div style="font-size:12px; color:#94a3b8; text-align:center; padding:20px;">保存された履歴はありません。</div>';
                     return;
                 }
 
-                items.forEach(item => {
+                grouped.forEach((bundle) => {
+                    const wrap = document.createElement('div');
+                    wrap.className = 'history-work-group';
+
+                    const header = document.createElement('div');
+                    header.className = 'history-work-header';
+                    const title = document.createElement('span');
+                    title.textContent = `${bundle.workName}（${bundle.versions.length}）`;
+                    const actions = document.createElement('div');
+                    actions.className = 'history-work-actions';
+                    const btnDelAll = document.createElement('button');
+                    btnDelAll.className = 'btn danger small';
+                    btnDelAll.textContent = '作業を削除';
+                    btnDelAll.addEventListener('click', async (ev) => {
+                        ev.stopPropagation();
+                        if (!confirm(`作業「${bundle.workName}」の履歴 ${bundle.versions.length} 件をすべて削除しますか？`)) return;
+                        for (const ver of bundle.versions) {
+                            await core.deleteFromDatabase(ver.id);
+                        }
+                        renderModalHistoryList();
+                    });
+                    actions.appendChild(btnDelAll);
+                    header.appendChild(title);
+                    header.appendChild(actions);
+
+                    const body = document.createElement('div');
+                    body.className = 'history-work-body';
+                    header.addEventListener('click', (ev) => {
+                        if (ev.target.closest('button')) return;
+                        body.classList.toggle('collapsed');
+                    });
+
+                    bundle.versions.forEach((item) => {
                     const card = document.createElement('div');
                     card.className = 'history-item-card';
 
                     const info = document.createElement('div');
                     const dateStr = new Date(item.updatedAt).toLocaleString();
-                    info.innerHTML = `<div class="history-card-title">${item.name || '無題のバージョン'}</div>
+                    const kind = item.saveKind === 'auto' ? '<span class="history-kind-auto">自動</span>' : '';
+                    info.innerHTML = `<div class="history-card-title">${dateStr}${kind}</div>
                                       <div class="history-card-meta">
-                                          <span>📅 ${dateStr}</span>
                                           <span>📄 ${item.pdfName || 'PDF未登録'}</span>
                                           <span>📌 配置数: ${item.instanceCount !== undefined ? item.instanceCount : '-'}</span>
                                       </div>`;
 
-                    const actions = document.createElement('div');
-                    actions.className = 'history-card-actions';
+                    const cardActions = document.createElement('div');
+                    cardActions.className = 'history-card-actions';
 
                     const btnRestore = document.createElement('button');
                     btnRestore.className = 'btn primary small';
                     btnRestore.textContent = '復元';
                     btnRestore.addEventListener('click', async () => {
-                        if (confirm(`バージョン「${item.name}」を復元しますか？現在の編集状態は上書きされます。`)) {
+                        if (confirm(`「${bundle.workName}」（${dateStr}）を復元しますか？現在の編集状態は上書きされます。`)) {
                             await core.loadFromDatabase(item.id);
-                            projectNameInput.value = item.name;
+                            projectNameInput.value = item.workName || WorkspaceData.stripWorkName(item.name);
                             updatePageIndicator();
                             renderGroupCards();
                             renderGroupedAccordion();
@@ -1910,7 +2042,7 @@ document.addEventListener('DOMContentLoaded', async () => {
                             renderCropRegionList();
                             updateStatusBar();
                             dataModal.style.display = 'none';
-                            alert(`「${item.name}」を復元しました。`);
+                            alert(`「${bundle.workName}」を復元しました。`);
                         }
                     });
 
@@ -1918,18 +2050,23 @@ document.addEventListener('DOMContentLoaded', async () => {
                     btnDelete.className = 'btn danger small';
                     btnDelete.textContent = '削除';
                     btnDelete.addEventListener('click', async () => {
-                        if (confirm(`この履歴「${item.name}」を完全に削除しますか？`)) {
+                        if (confirm(`この履歴（${dateStr}）を削除しますか？`)) {
                             await core.deleteFromDatabase(item.id);
                             renderModalHistoryList();
                         }
                     });
 
-                    actions.appendChild(btnRestore);
-                    actions.appendChild(btnDelete);
+                    cardActions.appendChild(btnRestore);
+                    cardActions.appendChild(btnDelete);
 
                     card.appendChild(info);
-                    card.appendChild(actions);
-                    modalProjectHistoryList.appendChild(card);
+                    card.appendChild(cardActions);
+                    body.appendChild(card);
+                    });
+
+                    wrap.appendChild(header);
+                    wrap.appendChild(body);
+                    modalProjectHistoryList.appendChild(wrap);
                 });
             };
         } catch (err) {
@@ -2100,6 +2237,35 @@ document.addEventListener('DOMContentLoaded', async () => {
         }
         return bytes;
     }
+
+    function persistAppSettings() {
+        if (!autosaveEnabledInput || !autosaveMinutesInput || typeof WorkspaceData === 'undefined') return;
+        appSettings.autoSaveEnabled = autosaveEnabledInput.checked;
+        appSettings.autoSaveMinutes = Math.max(1, parseInt(autosaveMinutesInput.value, 10) || WorkspaceData.DEFAULT_AUTO_SAVE_MINUTES);
+        WorkspaceData.saveSettings(appSettings);
+        restartAutoSave();
+    }
+
+    function restartAutoSave() {
+        if (autoSaveTimer) {
+            clearInterval(autoSaveTimer);
+            autoSaveTimer = null;
+        }
+        if (!appSettings.autoSaveEnabled) return;
+        const ms = Math.max(1, Number(appSettings.autoSaveMinutes) || 5) * 60 * 1000;
+        autoSaveTimer = setInterval(() => {
+            if (!workspaceDirty) return;
+            executeSaveVersion({ silent: true, saveKind: 'auto' });
+        }, ms);
+    }
+
+    if (autosaveEnabledInput && autosaveMinutesInput) {
+        autosaveEnabledInput.checked = appSettings.autoSaveEnabled !== false;
+        autosaveMinutesInput.value = String(appSettings.autoSaveMinutes || 5);
+        autosaveEnabledInput.addEventListener('change', persistAppSettings);
+        autosaveMinutesInput.addEventListener('change', persistAppSettings);
+    }
+    restartAutoSave();
 
     renderGroupCards();
     renderGroupedAccordion();
