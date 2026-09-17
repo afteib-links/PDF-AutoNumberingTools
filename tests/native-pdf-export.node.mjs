@@ -62,8 +62,11 @@ async function main() {
     assert(indexSrc.includes('standalone-file-origin'), '配布用 index.html は単一ファイル');
     assert(!indexSrc.includes('<script src="./vendor/pdf-lib.min.js">'), '配布用は pdf-lib をインライン化');
     assert(!indexSrc.includes('<script src="./AppCore.js">'), '配布用は AppCore をインライン化');
-    assert(indexSrc.includes('createMemoryDatabase'), 'file:// 用メモリDBが入っている');
+    assert(indexSrc.includes('createMemoryDatabase'), 'IndexedDBが使えないときの退避DBがある');
     assert(indexSrc.includes('_setupFakeWorker'), 'pdf.js はメインスレッドで動かす');
+    assert(indexSrc.includes('id="autosave-minutes"'), '自動保存の間隔設定がある');
+    assert(indexSrc.includes('id="btn-copy-instances"'), 'オブジェクトコピーボタンがある');
+    assert(indexDevSrc.includes('src="./WorkspaceData.js"'), '開発用は WorkspaceData を分割読み込み');
     assert(indexDevSrc.includes('id="pdf-export-mode-select"'), '開発用 HTML に出力方式がある');
     assert(/toolbar-cluster">\s*<span class="toolbar-label">作業<\/span>/.test(indexDevSrc), '作業ツールバーの div が閉じすぎていない');
     assert(indexSrc.includes('id="pdf-export-mode-select"'), '出力方式セレクトがある');
@@ -81,9 +84,11 @@ async function main() {
     assert(appCoreSrc.includes('copyCroppedPageToPaper'), '切り出しは元ページを copyPages して拡大する');
     assert(appCoreSrc.includes('drawImage(this.pdfCanvas'), '重ねキャンバスに下絵をコピーする');
     const dbSrc = readFileSync(join(root, 'DBManager.js'), 'utf8');
-    assert(dbSrc.includes('createMemoryDatabase'), 'file:// ではメモリDBを使う');
+    assert(dbSrc.includes('PdfEditorDB_local_v1'), 'IndexedDB失敗時は localStorage に残す');
     const mainSrc = readFileSync(join(root, 'main.js'), 'utf8');
     assert(mainSrc.includes('const deltaScreenX = currentX - dragStartMouse.x'), 'ドラッグ移動に deltaScreenX がある');
+    assert(mainSrc.includes("saveKind: 'auto'"), '自動保存がある');
+    assert(mainSrc.includes('copySelectedInstances'), 'オブジェクトコピーがある');
 
     const tri = PdfNativeExport.buildTriangleSvgPath(10, 20, 100, 40);
     assert(tri.includes('M 60 60'), '三角形の頂点は上辺中央 (PDF y 上向き)');

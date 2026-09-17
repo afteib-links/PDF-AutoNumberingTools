@@ -279,6 +279,9 @@
                             <input type="number" id="group-startnum-input" class="full-input" min="0" step="1" value="1">
                         </div>
                     </div>
+                    <div class="field-block" style="margin-top:10px;">
+                        <button type="button" id="btn-save-group-as-default" class="btn small">この内容を初期グループにする</button>
+                    </div>
                 </div>
 
                 <div id="pdf-layer-panel" class="pdf-aux-panel extract-only">
@@ -314,13 +317,17 @@
             <aside id="right-sidebar" class="sidebar place-only">
                 <div class="sidebar-header">
                     <h2>配置済みリスト</h2>
-                    <p class="help-text">ドラッグで連番並替。ダブルクリックで詳細。</p>
+                    <p class="help-text">ドラッグで連番並替。ダブルクリックで詳細。Ctrl+C / Ctrl+V でコピーと貼り付け。</p>
                     <div class="move-step-panel">
                         <div class="move-step-header">
                             <label>矢印キー移動量 (pt)</label>
                             <input type="number" id="move-step-number" min="0.1" max="50" step="0.1" value="1.0">
                         </div>
                         <input type="range" id="move-step-slider" min="0.1" max="50" step="0.1" value="1.0">
+                    </div>
+                    <div class="instance-toolbar">
+                        <button type="button" id="btn-copy-instances" class="btn small">コピー</button>
+                        <button type="button" id="btn-paste-instances" class="btn small">貼り付け</button>
                     </div>
                     <input type="text" id="instance-search" placeholder="テキストやグループ名で検索">
                 </div>
@@ -548,8 +555,15 @@
             <div class="modal-body" style="max-height: 70vh; overflow-y: auto;">
                 <div id="tab-content-history" class="tab-pane active">
                     <div class="history-top-bar">
-                        <span class="history-hint">ブラウザ内に保持されているバージョン一覧</span>
+                        <span class="history-hint">同じ作業名ごとに履歴をまとめます。ブラウザを閉じても残ります。</span>
                         <button id="btn-history-save-current" class="btn primary small">現在の状態を新規保存</button>
+                    </div>
+                    <div class="autosave-row">
+                        <label class="check-label plain"><input type="checkbox" id="autosave-enabled" checked> 自動保存</label>
+                        <label class="autosave-interval-label">間隔
+                            <input type="number" id="autosave-minutes" min="1" max="180" step="1" value="5">
+                            分
+                        </label>
                     </div>
                     <div id="modal-project-history-list" class="history-cards-scroll"></div>
                 </div>
@@ -603,7 +617,7 @@
                         <tr><th>やり直し</th><td>Ctrl+Y または Ctrl+Shift+Z</td></tr>
                         <tr><th>微調整</th><td>矢印キー（移動量は右サイドバー）</td></tr>
                         <tr><th>削除</th><td>Delete / Backspace（入力中は除く）</td></tr>
-                        <tr><th>複数選択</th><td>Shift+クリック、または空欄ドラッグ</td></tr>
+                        <tr><th>コピー / 貼り付け</th><td>選択中のオブジェクトを Ctrl+C / Ctrl+V（リストのボタンでも可）</td></tr>
                         <tr><th>詳細設定</th><td>オブジェクトをダブルクリック</td></tr>
                         <tr><th>閉じる / 選択解除</th><td>Esc</td></tr>
                     </tbody>
@@ -625,8 +639,8 @@
                     <ul>
                         <li><strong>PDF読込</strong>: 新しい下絵を開く。配置がある場合は残すか消すか確認する。</li>
                         <li><strong>PDF差替</strong>: 下絵だけ差し替え、配置は残す（元PDFの更新向け）。</li>
-                        <li><strong>保存</strong>: IndexedDB にタイムスタンプ付きの新規バージョンとして保存する。</li>
-                        <li><strong>データ管理</strong>: 履歴の復元/削除、完全ファイル退避、JSON入出力。</li>
+                        <li><strong>保存</strong>: 作業名ごとにバージョン履歴を残す。初期値5分の自動保存あり。データ管理から復元・削除。</li>
+                        <li><strong>データ管理</strong>: 作業名グルーピング、履歴の復元/削除、完全ファイル退避、JSON入出力。</li>
                         <li><strong>PDF出力</strong>: 下絵PDF（全ページ・指定範囲の切り出しとも）は常にオブジェクトのまま出す。セレクトは番号の重ね方だけ（番号もオブジェクト／番号は画像）。出力対象は全ページ／指定範囲。「表示レイヤーのみ」をオンにすると、非表示レイヤーは出さない。</li>
                         <li><strong>切り抜き・レイヤー</strong>: 配置とは別画面。帳票サイズの枠で抽出、PDFレイヤーの表示／非表示。</li>
                     </ul>
@@ -669,6 +683,7 @@
         })();
     </script>
     <script src="./EditorModels.js"></script>
+    <script src="./WorkspaceData.js"></script>
     <script src="./DBManager.js"></script>
     <script src="./CoordinateConverter.js"></script>
     <script src="./PdfLayoutTools.js"></script>

@@ -114,14 +114,18 @@ class PdfEditorCore {
         }
     }
 
-    async saveToDatabase(baseProjectName) {
+    async saveToDatabase(baseProjectName, options) {
         await this.db.open();
+        const opts = options || {};
+        const saveKind = opts.saveKind === 'auto' ? 'auto' : 'manual';
 
         const d = new Date();
         const pad = (n) => String(n).padStart(2, '0');
         const timestamp = `${d.getFullYear()}${pad(d.getMonth() + 1)}${pad(d.getDate())}_${pad(d.getHours())}${pad(d.getMinutes())}${pad(d.getSeconds())}`;
         
-        const rawName = (baseProjectName || "作業").replace(/_\d{8}_\d{6}$/, '').trim() || "作業";
+        const rawName = (typeof WorkspaceData !== 'undefined'
+            ? WorkspaceData.stripWorkName(baseProjectName)
+            : (baseProjectName || "作業").replace(/_\d{8}_\d{6}$/, '').trim()) || "作業";
         const versionedName = `${rawName}_${timestamp}`;
 
         const cleanGroups = JSON.parse(JSON.stringify(this.groups || []));
@@ -162,7 +166,7 @@ class PdfEditorCore {
                 tx.oncomplete = () => {
                     if (newProjectId !== null) {
                         this.currentProjectId = newProjectId;
-                        resolve({ id: newProjectId, name: versionedName });
+                        resolve({ id: newProjectId, name: versionedName, workName: rawName, saveKind: saveKind });
                     } else {
                         reject(new Error("プロジェクトIDの発行に失敗しました"));
                     }
@@ -174,6 +178,8 @@ class PdfEditorCore {
 
                 const projectRecord = {
                     name: versionedName,
+                    workName: rawName,
+                    saveKind: saveKind,
                     pdfName: this.currentPdfName || "",
                     pdfPath: this.currentPdfPath || "",
                     updatedAt: Date.now(),
@@ -244,6 +250,7 @@ class PdfEditorCore {
                 this.currentProjectId = projectId;
                 this.currentPdfName = projectRecord.pdfName || "";
                 this.currentPdfPath = projectRecord.pdfPath || "";
+                this.currentWorkName = projectRecord.workName || (typeof WorkspaceData !== 'undefined' ? WorkspaceData.stripWorkName(projectRecord.name) : projectRecord.name);
                 this.groups = dataRecord && dataRecord.groups ? dataRecord.groups : [];
                 this.instances = dataRecord && dataRecord.instances ? dataRecord.instances : [];
                 this.cropRegions = dataRecord && Array.isArray(dataRecord.cropRegions) ? dataRecord.cropRegions : [];

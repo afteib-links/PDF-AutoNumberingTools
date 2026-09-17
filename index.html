@@ -638,6 +638,48 @@ body, html {
 .tab-pane.active { display: block; }
 .history-top-bar { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; gap: 8px; }
 .history-hint { font-size: 13px; font-weight: 700; color: #334155; }
+.instance-toolbar { display: flex; gap: 6px; margin: 8px 0 0; }
+.instance-toolbar .btn { flex: 1; }
+
+.autosave-row {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 12px 16px;
+    margin: 8px 0 12px;
+    font-size: 12px;
+}
+.autosave-interval-label { display: inline-flex; align-items: center; gap: 6px; }
+.autosave-interval-label input {
+    width: 56px;
+    height: 28px;
+    padding: 0 6px;
+    border: 1px solid var(--border-color);
+    border-radius: 4px;
+}
+
+.history-work-group {
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    background: #f8fafc;
+    overflow: hidden;
+}
+.history-work-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    padding: 8px 10px;
+    background: #eef2ff;
+    cursor: pointer;
+    font-size: 13px;
+    font-weight: 700;
+}
+.history-work-actions { display: flex; gap: 6px; flex-shrink: 0; }
+.history-work-body { padding: 8px; display: flex; flex-direction: column; gap: 6px; }
+.history-work-body.collapsed { display: none; }
+.history-kind-auto { font-size: 10px; color: #0369a1; font-weight: 700; margin-left: 6px; }
+
 .history-cards-scroll { max-height: 340px; overflow-y: auto; display: flex; flex-direction: column; gap: 6px; }
 .history-item-card { background: #ffffff; border: 1px solid var(--border-color); border-radius: 6px; padding: 10px 12px; display: flex; justify-content: space-between; align-items: center; gap: 12px; }
 .history-item-card:hover { border-color: #94a3b8; background: #f8fafc; }
@@ -943,6 +985,9 @@ body, html {
                             <input type="number" id="group-startnum-input" class="full-input" min="0" step="1" value="1">
                         </div>
                     </div>
+                    <div class="field-block" style="margin-top:10px;">
+                        <button type="button" id="btn-save-group-as-default" class="btn small">この内容を初期グループにする</button>
+                    </div>
                 </div>
 
                 <div id="pdf-layer-panel" class="pdf-aux-panel extract-only">
@@ -978,13 +1023,17 @@ body, html {
             <aside id="right-sidebar" class="sidebar place-only">
                 <div class="sidebar-header">
                     <h2>配置済みリスト</h2>
-                    <p class="help-text">ドラッグで連番並替。ダブルクリックで詳細。</p>
+                    <p class="help-text">ドラッグで連番並替。ダブルクリックで詳細。Ctrl+C / Ctrl+V でコピーと貼り付け。</p>
                     <div class="move-step-panel">
                         <div class="move-step-header">
                             <label>矢印キー移動量 (pt)</label>
                             <input type="number" id="move-step-number" min="0.1" max="50" step="0.1" value="1.0">
                         </div>
                         <input type="range" id="move-step-slider" min="0.1" max="50" step="0.1" value="1.0">
+                    </div>
+                    <div class="instance-toolbar">
+                        <button type="button" id="btn-copy-instances" class="btn small">コピー</button>
+                        <button type="button" id="btn-paste-instances" class="btn small">貼り付け</button>
                     </div>
                     <input type="text" id="instance-search" placeholder="テキストやグループ名で検索">
                 </div>
@@ -1212,8 +1261,15 @@ body, html {
             <div class="modal-body" style="max-height: 70vh; overflow-y: auto;">
                 <div id="tab-content-history" class="tab-pane active">
                     <div class="history-top-bar">
-                        <span class="history-hint">ブラウザ内に保持されているバージョン一覧</span>
+                        <span class="history-hint">同じ作業名ごとに履歴をまとめます。ブラウザを閉じても残ります。</span>
                         <button id="btn-history-save-current" class="btn primary small">現在の状態を新規保存</button>
+                    </div>
+                    <div class="autosave-row">
+                        <label class="check-label plain"><input type="checkbox" id="autosave-enabled" checked> 自動保存</label>
+                        <label class="autosave-interval-label">間隔
+                            <input type="number" id="autosave-minutes" min="1" max="180" step="1" value="5">
+                            分
+                        </label>
                     </div>
                     <div id="modal-project-history-list" class="history-cards-scroll"></div>
                 </div>
@@ -1267,7 +1323,7 @@ body, html {
                         <tr><th>やり直し</th><td>Ctrl+Y または Ctrl+Shift+Z</td></tr>
                         <tr><th>微調整</th><td>矢印キー（移動量は右サイドバー）</td></tr>
                         <tr><th>削除</th><td>Delete / Backspace（入力中は除く）</td></tr>
-                        <tr><th>複数選択</th><td>Shift+クリック、または空欄ドラッグ</td></tr>
+                        <tr><th>コピー / 貼り付け</th><td>選択中のオブジェクトを Ctrl+C / Ctrl+V（リストのボタンでも可）</td></tr>
                         <tr><th>詳細設定</th><td>オブジェクトをダブルクリック</td></tr>
                         <tr><th>閉じる / 選択解除</th><td>Esc</td></tr>
                     </tbody>
@@ -1289,8 +1345,8 @@ body, html {
                     <ul>
                         <li><strong>PDF読込</strong>: 新しい下絵を開く。配置がある場合は残すか消すか確認する。</li>
                         <li><strong>PDF差替</strong>: 下絵だけ差し替え、配置は残す（元PDFの更新向け）。</li>
-                        <li><strong>保存</strong>: IndexedDB にタイムスタンプ付きの新規バージョンとして保存する。</li>
-                        <li><strong>データ管理</strong>: 履歴の復元/削除、完全ファイル退避、JSON入出力。</li>
+                        <li><strong>保存</strong>: 作業名ごとにバージョン履歴を残す。初期値5分の自動保存あり。データ管理から復元・削除。</li>
+                        <li><strong>データ管理</strong>: 作業名グルーピング、履歴の復元/削除、完全ファイル退避、JSON入出力。</li>
                         <li><strong>PDF出力</strong>: 下絵PDF（全ページ・指定範囲の切り出しとも）は常にオブジェクトのまま出す。セレクトは番号の重ね方だけ（番号もオブジェクト／番号は画像）。出力対象は全ページ／指定範囲。「表示レイヤーのみ」をオンにすると、非表示レイヤーは出さない。</li>
                         <li><strong>切り抜き・レイヤー</strong>: 配置とは別画面。帳票サイズの枠で抽出、PDFレイヤーの表示／非表示。</li>
                     </ul>
@@ -1487,13 +1543,204 @@ const InstanceModel = {
 </script>
     <script>
 /**
+ * WorkspaceData.js
+ * 作業名の正規化、履歴グルーピング、初期グループ、オブジェクト複製。
+ */
+(function (root) {
+    const SETTINGS_KEY = 'PdfEditorSettings_v1';
+    const DEFAULT_AUTO_SAVE_MINUTES = 5;
+    const PASTE_OFFSET_PT = 12;
+
+    function defaultGroupTemplate() {
+        return {
+            name: '新規グループ',
+            shape: 'rectangle',
+            width: 100,
+            height: 40,
+            isSizeAuto: false,
+            hasBorder: true,
+            borderWidth: 1.5,
+            borderColor: '#000000',
+            textColor: '#000000',
+            startCap: 'none',
+            endCap: 'none',
+            capSize: 6,
+            font: 'Yu Gothic',
+            fontSize: 12,
+            bgColor: '#ffffff',
+            bgOpacity: 0,
+            defaultText: '項目:{auto:000}',
+            startNumber: 1,
+            zIndex: 0,
+            isLocked: false,
+            isHidden: false
+        };
+    }
+
+    function defaultSettings() {
+        return {
+            autoSaveEnabled: true,
+            autoSaveMinutes: DEFAULT_AUTO_SAVE_MINUTES,
+            defaultGroup: defaultGroupTemplate()
+        };
+    }
+
+    function loadSettings(storage) {
+        const store = storage || (typeof localStorage !== 'undefined' ? localStorage : null);
+        const base = defaultSettings();
+        if (!store) return base;
+        try {
+            const raw = store.getItem(SETTINGS_KEY);
+            if (!raw) return base;
+            const parsed = JSON.parse(raw);
+            const minutes = Number(parsed.autoSaveMinutes);
+            base.autoSaveEnabled = parsed.autoSaveEnabled !== false;
+            base.autoSaveMinutes = Number.isFinite(minutes) && minutes > 0 ? minutes : DEFAULT_AUTO_SAVE_MINUTES;
+            if (parsed.defaultGroup && typeof parsed.defaultGroup === 'object') {
+                base.defaultGroup = Object.assign(defaultGroupTemplate(), parsed.defaultGroup);
+            }
+        } catch (e) { /* 壊れた設定は初期値 */ }
+        return base;
+    }
+
+    function saveSettings(settings, storage) {
+        const store = storage || (typeof localStorage !== 'undefined' ? localStorage : null);
+        if (!store) return false;
+        const next = Object.assign(defaultSettings(), settings || {});
+        next.autoSaveMinutes = Math.max(1, Number(next.autoSaveMinutes) || DEFAULT_AUTO_SAVE_MINUTES);
+        next.defaultGroup = Object.assign(defaultGroupTemplate(), next.defaultGroup || {});
+        store.setItem(SETTINGS_KEY, JSON.stringify(next));
+        return true;
+    }
+
+    function stripWorkName(name) {
+        const raw = String(name || '').replace(/_\d{8}_\d{6}$/, '').trim();
+        return raw || '作業';
+    }
+
+    function groupProjectsByWorkName(items) {
+        const map = new Map();
+        (items || []).forEach((item) => {
+            const workName = item.workName || stripWorkName(item.name);
+            if (!map.has(workName)) map.set(workName, []);
+            map.get(workName).push(item);
+        });
+        const groups = [];
+        map.forEach((versions, workName) => {
+            versions.sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0));
+            groups.push({
+                workName: workName,
+                versions: versions,
+                latestAt: versions[0] ? versions[0].updatedAt : 0
+            });
+        });
+        groups.sort((a, b) => (b.latestAt || 0) - (a.latestAt || 0));
+        return groups;
+    }
+
+    function nextId(list, key) {
+        const k = key || 'id';
+        let max = 0;
+        (list || []).forEach((row) => {
+            const n = Number(row[k]) || 0;
+            if (n > max) max = n;
+        });
+        return max + 1;
+    }
+
+    function cloneForPaste(payload, existingGroups, existingInstances, pageIndex, offsetPt) {
+        const offset = Number.isFinite(offsetPt) ? offsetPt : PASTE_OFFSET_PT;
+        const groupsIn = Array.isArray(payload && payload.groups) ? payload.groups : [];
+        const instIn = Array.isArray(payload && payload.instances) ? payload.instances : [];
+        const groupIdMap = {};
+        const newGroups = [];
+        let gid = nextId(existingGroups);
+
+        groupsIn.forEach((g) => {
+            const existing = (existingGroups || []).find((eg) => eg.id === g.id);
+            if (existing) {
+                groupIdMap[g.id] = existing.id;
+                return;
+            }
+            const ng = Object.assign({}, g, { id: gid });
+            groupIdMap[g.id] = gid;
+            newGroups.push(ng);
+            gid += 1;
+        });
+
+        let iid = nextId(existingInstances);
+        const newInstances = instIn.map((inst, i) => {
+            const mappedGroup = groupIdMap[inst.groupId];
+            const groupId = mappedGroup !== undefined
+                ? mappedGroup
+                : ((existingGroups || [])[0] ? existingGroups[0].id : 1);
+            return Object.assign({}, inst, {
+                id: iid + i,
+                groupId: groupId,
+                pageIndex: pageIndex,
+                order: iid + i,
+                x: (Number(inst.x) || 0) + offset,
+                y: (Number(inst.y) || 0) + offset
+            });
+        });
+
+        return { groups: newGroups, instances: newInstances };
+    }
+
+    function buildCopyPayload(groups, instances, selectedIds) {
+        const ids = selectedIds instanceof Set ? Array.from(selectedIds) : (selectedIds || []);
+        const picked = (instances || []).filter((inst) => ids.indexOf(inst.id) !== -1);
+        const groupIds = {};
+        picked.forEach((inst) => { groupIds[inst.groupId] = true; });
+        const pickedGroups = (groups || []).filter((g) => groupIds[g.id]);
+        return {
+            type: 'pdf-autonumbering-objects',
+            groups: JSON.parse(JSON.stringify(pickedGroups)),
+            instances: JSON.parse(JSON.stringify(picked))
+        };
+    }
+
+    function parseCopyPayload(text) {
+        if (!text) return null;
+        try {
+            const data = typeof text === 'string' ? JSON.parse(text) : text;
+            if (!data || data.type !== 'pdf-autonumbering-objects') return null;
+            if (!Array.isArray(data.instances) || data.instances.length === 0) return null;
+            return data;
+        } catch (e) {
+            return null;
+        }
+    }
+
+    const api = {
+        SETTINGS_KEY: SETTINGS_KEY,
+        DEFAULT_AUTO_SAVE_MINUTES: DEFAULT_AUTO_SAVE_MINUTES,
+        PASTE_OFFSET_PT: PASTE_OFFSET_PT,
+        defaultGroupTemplate: defaultGroupTemplate,
+        defaultSettings: defaultSettings,
+        loadSettings: loadSettings,
+        saveSettings: saveSettings,
+        stripWorkName: stripWorkName,
+        groupProjectsByWorkName: groupProjectsByWorkName,
+        cloneForPaste: cloneForPaste,
+        buildCopyPayload: buildCopyPayload,
+        parseCopyPayload: parseCopyPayload
+    };
+
+    if (typeof module !== 'undefined' && module.exports) {
+        module.exports = api;
+    }
+    if (root) root.WorkspaceData = api;
+}(typeof window !== 'undefined' ? window : globalThis));
+
+</script>
+    <script>
+/**
  * DBManager.js
- * ローカル永続化。file:// では IndexedDB が Edge でフレーム警告を出すためメモリに保持する。
+ * IndexedDB で永続化。開けない環境（一部の file://）は localStorage に退避する。
  */
 if (typeof window.DBManager === 'undefined') {
-    function isFileProtocol() {
-        return typeof location !== 'undefined' && location.protocol === 'file:';
-    }
+    const LS_DB_KEY = 'PdfEditorDB_local_v1';
 
     function requestResult(result) {
         const req = { result: result, error: null, onsuccess: null, onerror: null };
@@ -1503,12 +1750,87 @@ if (typeof window.DBManager === 'undefined') {
         return req;
     }
 
-    function createMemoryDatabase() {
+    function u8ToB64(bytes) {
+        if (!bytes) return '';
+        const u8 = bytes instanceof Uint8Array ? bytes : new Uint8Array(bytes);
+        let bin = '';
+        const step = 0x8000;
+        for (let i = 0; i < u8.length; i += step) {
+            bin += String.fromCharCode.apply(null, u8.subarray(i, Math.min(i + step, u8.length)));
+        }
+        return btoa(bin);
+    }
+
+    function b64ToU8(b64) {
+        if (!b64) return new Uint8Array(0);
+        const bin = atob(b64);
+        const out = new Uint8Array(bin.length);
+        for (let i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i);
+        return out;
+    }
+
+    function snapshotTables(tables) {
+        const out = {};
+        Object.keys(tables).forEach(function (name) {
+            const t = tables[name];
+            const rows = [];
+            t.rows.forEach(function (row, key) {
+                const copy = Object.assign({}, row);
+                if (copy.pdfBytes) {
+                    copy.pdfBytesB64 = u8ToB64(copy.pdfBytes);
+                    delete copy.pdfBytes;
+                }
+                rows.push([key, copy]);
+            });
+            out[name] = { nextId: t.nextId || 1, rows: rows };
+        });
+        return out;
+    }
+
+    function restoreTables(tables, snap) {
+        if (!snap) return;
+        Object.keys(tables).forEach(function (name) {
+            const src = snap[name];
+            if (!src) return;
+            tables[name].nextId = src.nextId || 1;
+            tables[name].rows = new Map();
+            (src.rows || []).forEach(function (pair) {
+                const key = pair[0];
+                const copy = Object.assign({}, pair[1]);
+                if (copy.pdfBytesB64) {
+                    copy.pdfBytes = b64ToU8(copy.pdfBytesB64);
+                    delete copy.pdfBytesB64;
+                }
+                tables[name].rows.set(key, copy);
+            });
+        });
+    }
+
+    function persistTables(tables) {
+        if (typeof localStorage === 'undefined') return false;
+        try {
+            localStorage.setItem(LS_DB_KEY, JSON.stringify(snapshotTables(tables)));
+            return true;
+        } catch (e) {
+            console.warn('localStorage への履歴保存に失敗:', e);
+            return false;
+        }
+    }
+
+    function createMemoryDatabase(persist) {
         const tables = {
             projects: { keyPath: 'id', autoIncrement: true, nextId: 1, rows: new Map() },
             project_blobs: { keyPath: 'projectId', autoIncrement: false, rows: new Map() },
             project_data: { keyPath: 'projectId', autoIncrement: false, rows: new Map() }
         };
+
+        if (persist && typeof localStorage !== 'undefined') {
+            try {
+                restoreTables(tables, JSON.parse(localStorage.getItem(LS_DB_KEY) || 'null'));
+            } catch (e) {
+                console.warn('localStorage 履歴の読込に失敗:', e);
+            }
+        }
 
         function makeStore(table, tx) {
             return {
@@ -1573,6 +1895,7 @@ if (typeof window.DBManager === 'undefined') {
                     tx._pending--;
                     if (tx._pending <= 0 && !tx._closed) {
                         tx._closed = true;
+                        if (persist) persistTables(tables);
                         if (typeof tx.oncomplete === 'function') tx.oncomplete();
                     }
                 };
@@ -1580,6 +1903,7 @@ if (typeof window.DBManager === 'undefined') {
                 queueMicrotask(function () {
                     if (tx._pending === 0 && !tx._closed) {
                         tx._closed = true;
+                        if (persist) persistTables(tables);
                         if (typeof tx.oncomplete === 'function') tx.oncomplete();
                     }
                 });
@@ -1605,9 +1929,9 @@ if (typeof window.DBManager === 'undefined') {
                 this.db = null;
             }
 
-            if (isFileProtocol()) {
+            if (typeof indexedDB === 'undefined') {
                 this.usesMemory = true;
-                this.db = createMemoryDatabase();
+                this.db = createMemoryDatabase(true);
                 return this.db;
             }
 
@@ -1615,9 +1939,9 @@ if (typeof window.DBManager === 'undefined') {
                 const request = indexedDB.open(this.dbName, this.dbVersion);
 
                 request.onerror = (e) => {
-                    console.error("IndexedDBオープンエラー:", e.target.error);
+                    console.warn("IndexedDBを開けないため localStorage に保存します:", e.target.error);
                     this.usesMemory = true;
-                    this.db = createMemoryDatabase();
+                    this.db = createMemoryDatabase(true);
                     resolve(this.db);
                 };
 
@@ -1627,6 +1951,7 @@ if (typeof window.DBManager === 'undefined') {
 
                 request.onsuccess = (e) => {
                     this.db = e.target.result;
+                    this.usesMemory = false;
 
                     const requiredStores = ["projects", "project_blobs", "project_data"];
                     const hasAll = requiredStores.every(s => this.db.objectStoreNames.contains(s));
@@ -1665,8 +1990,11 @@ if (typeof window.DBManager === 'undefined') {
         }
 
         async recreateDatabase() {
-            if (isFileProtocol() || this.usesMemory) {
-                this.db = createMemoryDatabase();
+            if (this.usesMemory || typeof indexedDB === 'undefined') {
+                try {
+                    if (typeof localStorage !== 'undefined') localStorage.removeItem(LS_DB_KEY);
+                } catch (e) { /* ignore */ }
+                this.db = createMemoryDatabase(true);
                 this.usesMemory = true;
                 return this.db;
             }
@@ -1680,7 +2008,11 @@ if (typeof window.DBManager === 'undefined') {
                     this.dbVersion = Math.max(this.dbVersion + 1, 7);
                     this.open().then(resolve).catch(reject);
                 };
-                delReq.onerror = () => reject(delReq.error);
+                delReq.onerror = () => {
+                    this.usesMemory = true;
+                    this.db = createMemoryDatabase(true);
+                    resolve(this.db);
+                };
             });
         }
     };
@@ -2781,14 +3113,18 @@ class PdfEditorCore {
         }
     }
 
-    async saveToDatabase(baseProjectName) {
+    async saveToDatabase(baseProjectName, options) {
         await this.db.open();
+        const opts = options || {};
+        const saveKind = opts.saveKind === 'auto' ? 'auto' : 'manual';
 
         const d = new Date();
         const pad = (n) => String(n).padStart(2, '0');
         const timestamp = `${d.getFullYear()}${pad(d.getMonth() + 1)}${pad(d.getDate())}_${pad(d.getHours())}${pad(d.getMinutes())}${pad(d.getSeconds())}`;
         
-        const rawName = (baseProjectName || "作業").replace(/_\d{8}_\d{6}$/, '').trim() || "作業";
+        const rawName = (typeof WorkspaceData !== 'undefined'
+            ? WorkspaceData.stripWorkName(baseProjectName)
+            : (baseProjectName || "作業").replace(/_\d{8}_\d{6}$/, '').trim()) || "作業";
         const versionedName = `${rawName}_${timestamp}`;
 
         const cleanGroups = JSON.parse(JSON.stringify(this.groups || []));
@@ -2829,7 +3165,7 @@ class PdfEditorCore {
                 tx.oncomplete = () => {
                     if (newProjectId !== null) {
                         this.currentProjectId = newProjectId;
-                        resolve({ id: newProjectId, name: versionedName });
+                        resolve({ id: newProjectId, name: versionedName, workName: rawName, saveKind: saveKind });
                     } else {
                         reject(new Error("プロジェクトIDの発行に失敗しました"));
                     }
@@ -2841,6 +3177,8 @@ class PdfEditorCore {
 
                 const projectRecord = {
                     name: versionedName,
+                    workName: rawName,
+                    saveKind: saveKind,
                     pdfName: this.currentPdfName || "",
                     pdfPath: this.currentPdfPath || "",
                     updatedAt: Date.now(),
@@ -2911,6 +3249,7 @@ class PdfEditorCore {
                 this.currentProjectId = projectId;
                 this.currentPdfName = projectRecord.pdfName || "";
                 this.currentPdfPath = projectRecord.pdfPath || "";
+                this.currentWorkName = projectRecord.workName || (typeof WorkspaceData !== 'undefined' ? WorkspaceData.stripWorkName(projectRecord.name) : projectRecord.name);
                 this.groups = dataRecord && dataRecord.groups ? dataRecord.groups : [];
                 this.instances = dataRecord && dataRecord.instances ? dataRecord.instances : [];
                 this.cropRegions = dataRecord && Array.isArray(dataRecord.cropRegions) ? dataRecord.cropRegions : [];
@@ -3945,10 +4284,18 @@ document.addEventListener('DOMContentLoaded', async () => {
 
     let currentMode = 'select';
     let currentWorkspace = 'place';
+    let workspaceDirty = false;
+    let lastSaveLabel = '';
+    let autoSaveTimer = null;
+    let appSettings = (typeof WorkspaceData !== 'undefined') ? WorkspaceData.loadSettings() : { autoSaveEnabled: true, autoSaveMinutes: 5, defaultGroup: {} };
 
     const undoStack = [];
     const redoStack = [];
     const maxStack = 40;
+
+    function markDirty() {
+        workspaceDirty = true;
+    }
 
     function pushHistory() {
         undoStack.push({
@@ -3959,6 +4306,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         if (undoStack.length > maxStack) undoStack.shift();
         redoStack.length = 0;
         updateHistoryButtons();
+        markDirty();
     }
 
     function updateHistoryButtons() {
@@ -4011,6 +4359,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     // 左サイドバー：グループマスター & インライン設定パネル
     const groupCardsContainer = document.getElementById('group-cards-container');
     const btnAddGroup = document.getElementById('btn-add-group');
+    const btnSaveGroupAsDefault = document.getElementById('btn-save-group-as-default');
     const inlineGroupPanel = document.getElementById('group-inline-panel');
 
     const groupNameInput = document.getElementById('group-name-input');
@@ -4049,6 +4398,8 @@ document.addEventListener('DOMContentLoaded', async () => {
     const moveStepNumber = document.getElementById('move-step-number');
     const moveStepSlider = document.getElementById('move-step-slider');
     const instanceSearch = document.getElementById('instance-search');
+    const btnCopyInstances = document.getElementById('btn-copy-instances');
+    const btnPasteInstances = document.getElementById('btn-paste-instances');
 
     // インスタンス詳細モーダル要素
     const instanceModal = document.getElementById('instance-modal');
@@ -4117,6 +4468,8 @@ document.addEventListener('DOMContentLoaded', async () => {
     const tabBtnHistory = document.getElementById('tab-btn-history');
     const tabBtnJson = document.getElementById('tab-btn-json');
     const tabContentHistory = document.getElementById('tab-content-history');
+    const autosaveEnabledInput = document.getElementById('autosave-enabled');
+    const autosaveMinutesInput = document.getElementById('autosave-minutes');
     const tabContentJson = document.getElementById('tab-content-json');
     const btnHistorySaveCurrent = document.getElementById('btn-history-save-current');
     const modalProjectHistoryList = document.getElementById('modal-project-history-list');
@@ -4262,7 +4615,7 @@ document.addEventListener('DOMContentLoaded', async () => {
             : (currentMode === 'draw' ? '登録（クリックで配置）' : '選択');
         const zoom = Math.round(core.coordConverter.zoomLevel * 100);
         const cropN = core.cropRegions.length;
-        appStatus.textContent = `${workspaceLabel} | ${modeLabel} | 選択 ${core.selectedInstanceIds.size}件 | 抽出 ${cropN} | ${zoom}%`;
+        appStatus.textContent = `${workspaceLabel} | ${modeLabel} | 選択 ${core.selectedInstanceIds.size}件 | 抽出 ${cropN} | ${zoom}%${lastSaveLabel ? ' | ' + lastSaveLabel : ''}`;
     }
 
     function setWorkspace(ws) {
@@ -4388,6 +4741,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         }
         const success = await core.loadPdfFile(file);
         if (success) {
+            markDirty();
             updatePageIndicator();
             renderGroupedAccordion();
             renderPdfLayerList();
@@ -4403,6 +4757,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         if (!file) return;
         const success = await core.replacePdfFile(file);
         if (success) {
+            markDirty();
             updatePageIndicator();
             renderPdfLayerList();
             core.renderInteractiveLayer();
@@ -4437,20 +4792,26 @@ document.addEventListener('DOMContentLoaded', async () => {
     btnZoomOut.addEventListener('click', () => applyZoom(Math.round(core.coordConverter.zoomLevel * 100) - 10));
     zoomInput.addEventListener('change', (e) => applyZoom(parseInt(e.target.value, 10) || 100));
 
-    const executeSaveVersion = async () => {
+    const executeSaveVersion = async (opts) => {
+        const silent = !!(opts && opts.silent);
+        const saveKind = (opts && opts.saveKind) || 'manual';
         const baseName = projectNameInput.value.trim() || "作業";
         try {
-            const saved = await core.saveToDatabase(baseName);
-            projectNameInput.value = saved.name;
-            alert(`バージョン履歴として保存しました:\n${saved.name}`);
-            
+            const saved = await core.saveToDatabase(baseName, { saveKind: saveKind });
+            projectNameInput.value = saved.workName || baseName;
+            workspaceDirty = false;
+            lastSaveLabel = (saveKind === 'auto' ? '自動保存 ' : '保存 ') + new Date().toLocaleTimeString();
+            updateStatusBar();
             const isModalVisible = window.getComputedStyle(dataModal).display !== 'none';
             if (isModalVisible) {
                 renderModalHistoryList();
             }
+            if (!silent) {
+                alert(`バージョン履歴として保存しました:\n${saved.workName}（${saved.name}）`);
+            }
         } catch (err) {
             console.error("保存失敗詳細:", err);
-            alert("保存失敗: " + (err.message || err));
+            if (!silent) alert("保存失敗: " + (err.message || err));
         }
     };
 
@@ -4700,14 +5061,13 @@ document.addEventListener('DOMContentLoaded', async () => {
     btnAddGroup.addEventListener('click', () => {
         pushHistory();
         const newId = core.groups.length > 0 ? Math.max(...core.groups.map(g => g.id)) + 1 : 1;
-        const newGroup = Object.assign({}, GroupModel, {
+        const tmpl = (typeof WorkspaceData !== 'undefined')
+            ? Object.assign({}, WorkspaceData.loadSettings().defaultGroup)
+            : {};
+        const newGroup = Object.assign({}, GroupModel, tmpl, {
             id: newId,
             projectId: core.currentProjectId || 1,
-            name: `新規グループ ${newId}`,
-            shape: 'rectangle',
-            width: 100,
-            height: 40,
-            defaultText: "項目:{auto:000}"
+            name: (tmpl.name && tmpl.name !== '新規グループ') ? tmpl.name : `新規グループ ${newId}`
         });
         core.groups.push(newGroup);
         showInlineGroupPanel(newId);
@@ -4735,6 +5095,25 @@ document.addEventListener('DOMContentLoaded', async () => {
         core.renderInteractiveLayer();
         renderGroupedAccordion();
         updateStatusBar();
+    }
+
+    if (btnSaveGroupAsDefault) {
+        btnSaveGroupAsDefault.addEventListener('click', () => {
+            const g = core.groups.find(item => item.id === activeGroupId);
+            if (!g) {
+                alert('先にグループを選んでください。');
+                return;
+            }
+            const tmpl = WorkspaceData.defaultGroupTemplate();
+            Object.keys(tmpl).forEach((key) => {
+                if (Object.prototype.hasOwnProperty.call(g, key) && key !== 'id' && key !== 'projectId') {
+                    tmpl[key] = g[key];
+                }
+            });
+            appSettings.defaultGroup = tmpl;
+            WorkspaceData.saveSettings(appSettings);
+            alert('現在のグループ設定を初期グループにしました。新規グループに使われます。');
+        });
     }
 
     const syncGroupFromInputs = () => {
@@ -4933,6 +5312,56 @@ document.addEventListener('DOMContentLoaded', async () => {
     }
 
     instanceSearch.addEventListener('input', renderGroupedAccordion);
+
+    function copySelectedInstances() {
+        if (typeof WorkspaceData === 'undefined') return;
+        if (core.selectedInstanceIds.size === 0) {
+            alert('コピーするオブジェクトを選択してください。');
+            return;
+        }
+        const payload = WorkspaceData.buildCopyPayload(core.groups, core.instances, core.selectedInstanceIds);
+        const text = JSON.stringify(payload);
+        window._pdfObjectClipboard = text;
+        if (navigator.clipboard && navigator.clipboard.writeText) {
+            navigator.clipboard.writeText(text).catch(() => {});
+        }
+        lastSaveLabel = `コピー ${payload.instances.length}件`;
+        updateStatusBar();
+    }
+
+    async function pasteCopiedInstances() {
+        if (typeof WorkspaceData === 'undefined') return;
+        let text = window._pdfObjectClipboard || '';
+        if (navigator.clipboard && navigator.clipboard.readText) {
+            try {
+                const clip = await navigator.clipboard.readText();
+                if (clip && clip.indexOf('pdf-autonumbering-objects') !== -1) text = clip;
+            } catch (e) { /* 権限なし時は内部クリップボード */ }
+        }
+        const payload = WorkspaceData.parseCopyPayload(text);
+        if (!payload) {
+            alert('貼り付けできるオブジェクトデータがありません。');
+            return;
+        }
+        const mapped = WorkspaceData.cloneForPaste(
+            payload,
+            core.groups,
+            core.instances,
+            core.currentPageNum - 1,
+            WorkspaceData.PASTE_OFFSET_PT
+        );
+        pushHistory();
+        mapped.groups.forEach((g) => core.groups.push(g));
+        mapped.instances.forEach((inst) => core.instances.push(inst));
+        core.selectedInstanceIds = new Set(mapped.instances.map((i) => i.id));
+        renderGroupCards();
+        core.renderInteractiveLayer();
+        renderGroupedAccordion();
+        updateStatusBar();
+    }
+
+    if (btnCopyInstances) btnCopyInstances.addEventListener('click', copySelectedInstances);
+    if (btnPasteInstances) btnPasteInstances.addEventListener('click', () => { pasteCopiedInstances(); });
 
     function bindOverridePair(checkbox, inputEl, parentCard) {
         const updateState = () => {
@@ -5725,6 +6154,16 @@ document.addEventListener('DOMContentLoaded', async () => {
             deleteSelectedInstances();
             return;
         }
+        if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'c') {
+            e.preventDefault();
+            copySelectedInstances();
+            return;
+        }
+        if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'v') {
+            e.preventDefault();
+            pasteCopiedInstances();
+            return;
+        }
         if (core.selectedInstanceIds.size === 0) return;
         if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(e.key)) {
             e.preventDefault();
@@ -5792,36 +6231,68 @@ document.addEventListener('DOMContentLoaded', async () => {
             const req = store.getAll();
             req.onsuccess = () => {
                 const items = req.result || [];
-                items.sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0));
+                const grouped = WorkspaceData.groupProjectsByWorkName(items);
 
-                if (items.length === 0) {
+                if (grouped.length === 0) {
                     modalProjectHistoryList.innerHTML = '<div style="font-size:12px; color:#94a3b8; text-align:center; padding:20px;">保存された履歴はありません。</div>';
                     return;
                 }
 
-                items.forEach(item => {
+                grouped.forEach((bundle) => {
+                    const wrap = document.createElement('div');
+                    wrap.className = 'history-work-group';
+
+                    const header = document.createElement('div');
+                    header.className = 'history-work-header';
+                    const title = document.createElement('span');
+                    title.textContent = `${bundle.workName}（${bundle.versions.length}）`;
+                    const actions = document.createElement('div');
+                    actions.className = 'history-work-actions';
+                    const btnDelAll = document.createElement('button');
+                    btnDelAll.className = 'btn danger small';
+                    btnDelAll.textContent = '作業を削除';
+                    btnDelAll.addEventListener('click', async (ev) => {
+                        ev.stopPropagation();
+                        if (!confirm(`作業「${bundle.workName}」の履歴 ${bundle.versions.length} 件をすべて削除しますか？`)) return;
+                        for (const ver of bundle.versions) {
+                            await core.deleteFromDatabase(ver.id);
+                        }
+                        renderModalHistoryList();
+                    });
+                    actions.appendChild(btnDelAll);
+                    header.appendChild(title);
+                    header.appendChild(actions);
+
+                    const body = document.createElement('div');
+                    body.className = 'history-work-body';
+                    header.addEventListener('click', (ev) => {
+                        if (ev.target.closest('button')) return;
+                        body.classList.toggle('collapsed');
+                    });
+
+                    bundle.versions.forEach((item) => {
                     const card = document.createElement('div');
                     card.className = 'history-item-card';
 
                     const info = document.createElement('div');
                     const dateStr = new Date(item.updatedAt).toLocaleString();
-                    info.innerHTML = `<div class="history-card-title">${item.name || '無題のバージョン'}</div>
+                    const kind = item.saveKind === 'auto' ? '<span class="history-kind-auto">自動</span>' : '';
+                    info.innerHTML = `<div class="history-card-title">${dateStr}${kind}</div>
                                       <div class="history-card-meta">
-                                          <span>📅 ${dateStr}</span>
                                           <span>📄 ${item.pdfName || 'PDF未登録'}</span>
                                           <span>📌 配置数: ${item.instanceCount !== undefined ? item.instanceCount : '-'}</span>
                                       </div>`;
 
-                    const actions = document.createElement('div');
-                    actions.className = 'history-card-actions';
+                    const cardActions = document.createElement('div');
+                    cardActions.className = 'history-card-actions';
 
                     const btnRestore = document.createElement('button');
                     btnRestore.className = 'btn primary small';
                     btnRestore.textContent = '復元';
                     btnRestore.addEventListener('click', async () => {
-                        if (confirm(`バージョン「${item.name}」を復元しますか？現在の編集状態は上書きされます。`)) {
+                        if (confirm(`「${bundle.workName}」（${dateStr}）を復元しますか？現在の編集状態は上書きされます。`)) {
                             await core.loadFromDatabase(item.id);
-                            projectNameInput.value = item.name;
+                            projectNameInput.value = item.workName || WorkspaceData.stripWorkName(item.name);
                             updatePageIndicator();
                             renderGroupCards();
                             renderGroupedAccordion();
@@ -5829,7 +6300,7 @@ document.addEventListener('DOMContentLoaded', async () => {
                             renderCropRegionList();
                             updateStatusBar();
                             dataModal.style.display = 'none';
-                            alert(`「${item.name}」を復元しました。`);
+                            alert(`「${bundle.workName}」を復元しました。`);
                         }
                     });
 
@@ -5837,18 +6308,23 @@ document.addEventListener('DOMContentLoaded', async () => {
                     btnDelete.className = 'btn danger small';
                     btnDelete.textContent = '削除';
                     btnDelete.addEventListener('click', async () => {
-                        if (confirm(`この履歴「${item.name}」を完全に削除しますか？`)) {
+                        if (confirm(`この履歴（${dateStr}）を削除しますか？`)) {
                             await core.deleteFromDatabase(item.id);
                             renderModalHistoryList();
                         }
                     });
 
-                    actions.appendChild(btnRestore);
-                    actions.appendChild(btnDelete);
+                    cardActions.appendChild(btnRestore);
+                    cardActions.appendChild(btnDelete);
 
                     card.appendChild(info);
-                    card.appendChild(actions);
-                    modalProjectHistoryList.appendChild(card);
+                    card.appendChild(cardActions);
+                    body.appendChild(card);
+                    });
+
+                    wrap.appendChild(header);
+                    wrap.appendChild(body);
+                    modalProjectHistoryList.appendChild(wrap);
                 });
             };
         } catch (err) {
@@ -6019,6 +6495,35 @@ document.addEventListener('DOMContentLoaded', async () => {
         }
         return bytes;
     }
+
+    function persistAppSettings() {
+        if (!autosaveEnabledInput || !autosaveMinutesInput || typeof WorkspaceData === 'undefined') return;
+        appSettings.autoSaveEnabled = autosaveEnabledInput.checked;
+        appSettings.autoSaveMinutes = Math.max(1, parseInt(autosaveMinutesInput.value, 10) || WorkspaceData.DEFAULT_AUTO_SAVE_MINUTES);
+        WorkspaceData.saveSettings(appSettings);
+        restartAutoSave();
+    }
+
+    function restartAutoSave() {
+        if (autoSaveTimer) {
+            clearInterval(autoSaveTimer);
+            autoSaveTimer = null;
+        }
+        if (!appSettings.autoSaveEnabled) return;
+        const ms = Math.max(1, Number(appSettings.autoSaveMinutes) || 5) * 60 * 1000;
+        autoSaveTimer = setInterval(() => {
+            if (!workspaceDirty) return;
+            executeSaveVersion({ silent: true, saveKind: 'auto' });
+        }, ms);
+    }
+
+    if (autosaveEnabledInput && autosaveMinutesInput) {
+        autosaveEnabledInput.checked = appSettings.autoSaveEnabled !== false;
+        autosaveMinutesInput.value = String(appSettings.autoSaveMinutes || 5);
+        autosaveEnabledInput.addEventListener('change', persistAppSettings);
+        autosaveMinutesInput.addEventListener('change', persistAppSettings);
+    }
+    restartAutoSave();
 
     renderGroupCards();
     renderGroupedAccordion();
