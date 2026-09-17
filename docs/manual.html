@@ -1,0 +1,473 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PDF配置ツール 利用マニュアル — オフィス席番</title>
+    <style>
+        :root {
+            --ink: #1e293b;
+            --muted: #64748b;
+            --line: #dbe4ee;
+            --paper: #f7f4ee;
+            --card: #ffffff;
+            --accent: #0f766e;
+            --accent-dark: #115e59;
+            --navy: #1e3a5f;
+            --desk: #c4b59a;
+            --desk-edge: #8b7355;
+            --seat: #2563eb;
+            --warn: #b45309;
+        }
+        * { box-sizing: border-box; }
+        html { scroll-behavior: smooth; }
+        body {
+            margin: 0;
+            font-family: "Yu Gothic", "YuGothic", "Hiragino Kaku Gothic ProN", Meiryo, sans-serif;
+            color: var(--ink);
+            background: var(--paper);
+            line-height: 1.7;
+        }
+        .topbar {
+            position: sticky;
+            top: 0;
+            z-index: 20;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 12px;
+            padding: 10px 20px;
+            background: var(--navy);
+            color: #fff;
+        }
+        .topbar strong { letter-spacing: 0.04em; }
+        .topbar-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+        .btn {
+            appearance: none;
+            border: 0;
+            border-radius: 6px;
+            padding: 8px 14px;
+            font: inherit;
+            font-size: 13px;
+            font-weight: 700;
+            cursor: pointer;
+            background: #fff;
+            color: var(--navy);
+        }
+        .btn.primary { background: #14b8a6; color: #042f2e; }
+        .wrap { max-width: 980px; margin: 0 auto; padding: 28px 20px 80px; }
+        .hero {
+            background: var(--card);
+            border: 1px solid var(--line);
+            border-radius: 16px;
+            padding: 28px;
+            display: grid;
+            grid-template-columns: 1.1fr 1fr;
+            gap: 24px;
+            align-items: center;
+        }
+        .hero h1 { margin: 0 0 8px; font-size: 28px; line-height: 1.35; color: var(--navy); }
+        .lede { margin: 0; color: var(--muted); }
+        .badge {
+            display: inline-block;
+            font-size: 12px;
+            font-weight: 700;
+            color: var(--accent-dark);
+            background: #ccfbf1;
+            border-radius: 999px;
+            padding: 2px 10px;
+            margin-bottom: 10px;
+        }
+        toc, .toc {
+            margin: 28px 0;
+            background: var(--card);
+            border: 1px solid var(--line);
+            border-radius: 12px;
+            padding: 18px 22px;
+        }
+        .toc h2 { margin: 0 0 8px; font-size: 16px; }
+        .toc ol { margin: 0; padding-left: 22px; }
+        .toc a { color: var(--accent-dark); text-decoration: none; }
+        .toc a:hover { text-decoration: underline; }
+        h2.sec {
+            margin: 40px 0 12px;
+            padding-bottom: 6px;
+            border-bottom: 3px solid var(--accent);
+            color: var(--navy);
+            font-size: 22px;
+        }
+        h3 { margin: 22px 0 8px; font-size: 17px; color: var(--accent-dark); }
+        p { margin: 0 0 12px; }
+        .steps { counter-reset: step; padding: 0; margin: 0 0 16px; list-style: none; }
+        .steps > li {
+            position: relative;
+            background: var(--card);
+            border: 1px solid var(--line);
+            border-radius: 12px;
+            padding: 14px 16px 14px 58px;
+            margin: 0 0 10px;
+        }
+        .steps > li::before {
+            counter-increment: step;
+            content: counter(step);
+            position: absolute;
+            left: 14px;
+            top: 14px;
+            width: 28px;
+            height: 28px;
+            border-radius: 50%;
+            background: var(--accent);
+            color: #fff;
+            font-weight: 800;
+            font-size: 14px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        kbd, .ui {
+            display: inline-block;
+            font-weight: 700;
+            font-size: 12.5px;
+            background: #eef2ff;
+            color: #312e81;
+            border: 1px solid #c7d2fe;
+            border-radius: 4px;
+            padding: 0 6px;
+            line-height: 1.6;
+        }
+        .ui.green { background: #dcfce7; border-color: #86efac; color: #166534; }
+        .ui.orange { background: #ffedd5; border-color: #fdba74; color: #9a3412; }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            background: var(--card);
+            font-size: 14px;
+            margin: 0 0 16px;
+        }
+        th, td { border: 1px solid var(--line); padding: 8px 10px; text-align: left; vertical-align: top; }
+        th { background: #ecfeff; color: var(--navy); }
+        .note {
+            background: #fff7ed;
+            border-left: 4px solid var(--warn);
+            padding: 10px 14px;
+            margin: 0 0 16px;
+            font-size: 14px;
+        }
+        .tip {
+            background: #ecfeff;
+            border-left: 4px solid var(--accent);
+            padding: 10px 14px;
+            margin: 0 0 16px;
+            font-size: 14px;
+        }
+        .floor-card {
+            background: var(--card);
+            border: 1px solid var(--line);
+            border-radius: 16px;
+            padding: 16px;
+            margin: 0 0 16px;
+        }
+        .floor-card figcaption {
+            margin-top: 8px;
+            font-size: 13px;
+            color: var(--muted);
+            text-align: center;
+        }
+        .shape-row {
+            display: grid;
+            grid-template-columns: repeat(5, 1fr);
+            gap: 10px;
+            margin: 0 0 16px;
+        }
+        .shape-item {
+            background: var(--card);
+            border: 1px solid var(--line);
+            border-radius: 10px;
+            text-align: center;
+            padding: 12px 6px;
+            font-size: 12px;
+            font-weight: 700;
+        }
+        .shape-item svg { display: block; margin: 0 auto 8px; }
+        footer {
+            margin-top: 40px;
+            color: var(--muted);
+            font-size: 12px;
+            text-align: center;
+        }
+        @media (max-width: 800px) {
+            .hero { grid-template-columns: 1fr; }
+            .shape-row { grid-template-columns: repeat(2, 1fr); }
+        }
+        @media print {
+            body { background: #fff; }
+            .topbar, .no-print { display: none !important; }
+            .wrap { max-width: none; padding: 0; }
+            .hero, .toc, .floor-card, .steps > li { break-inside: avoid; }
+            h2.sec { break-after: avoid; }
+            a { color: inherit; text-decoration: none; }
+            @page { size: A4; margin: 14mm; }
+        }
+    </style>
+</head>
+<body>
+    <div class="topbar no-print">
+        <strong>PDF配置ツール 利用マニュアル</strong>
+        <div class="topbar-actions">
+            <a class="btn" href="manual.pdf">用意済みPDFを開く</a>
+            <button type="button" class="btn" onclick="window.print()">印刷プレビュー</button>
+            <button type="button" class="btn primary" onclick="window.print()">このマニュアルをPDF出力</button>
+        </div>
+    </div>
+
+    <div class="wrap">
+        <header class="hero">
+            <div>
+                <span class="badge">想定シーン：オフィスプランの席番</span>
+                <h1>図面の一部を切り出して、<br>席に番号を置く</h1>
+                <p class="lede">全体レイアウトPDFからフロアや区画を切り取り、席の位置にオブジェクトを置いて連番付きPDFを作ります。色・形の変更、位置ずらし、整列、コピー＆ペーストまで、画面のボタン名どおりに説明します。</p>
+            </div>
+            <figure class="floor-card" style="margin:0; padding:12px;">
+                <svg viewBox="0 0 420 280" role="img" aria-label="オフィスレイアウトに席番号を置いた完成イメージ">
+                    <rect x="8" y="8" width="404" height="264" rx="8" fill="#f8fafc" stroke="#94a3b8"/>
+                    <text x="20" y="28" font-size="12" fill="#334155" font-weight="700">3F 執務室（切り出し後）</text>
+                    <rect x="20" y="42" width="250" height="220" fill="#eef2ff" stroke="#c7d2fe"/>
+                    <text x="28" y="58" font-size="10" fill="#4338ca">執務エリア</text>
+                    <!-- desks 2x4 -->
+                    <g id="desks">
+                        <g transform="translate(40,78)">
+                            <rect width="44" height="28" rx="2" fill="#c4b59a" stroke="#8b7355"/>
+                            <circle cx="22" cy="14" r="11" fill="#2563eb"/><text x="22" y="18" text-anchor="middle" font-size="10" fill="#fff" font-weight="700">01</text>
+                        </g>
+                        <g transform="translate(100,78)">
+                            <rect width="44" height="28" rx="2" fill="#c4b59a" stroke="#8b7355"/>
+                            <circle cx="22" cy="14" r="11" fill="#2563eb"/><text x="22" y="18" text-anchor="middle" font-size="10" fill="#fff" font-weight="700">02</text>
+                        </g>
+                        <g transform="translate(160,78)">
+                            <rect width="44" height="28" rx="2" fill="#c4b59a" stroke="#8b7355"/>
+                            <circle cx="22" cy="14" r="11" fill="#2563eb"/><text x="22" y="18" text-anchor="middle" font-size="10" fill="#fff" font-weight="700">03</text>
+                        </g>
+                        <g transform="translate(40,128)">
+                            <rect width="44" height="28" rx="2" fill="#c4b59a" stroke="#8b7355"/>
+                            <circle cx="22" cy="14" r="11" fill="#0f766e"/><text x="22" y="18" text-anchor="middle" font-size="10" fill="#fff" font-weight="700">04</text>
+                        </g>
+                        <g transform="translate(100,128)">
+                            <rect width="44" height="28" rx="2" fill="#c4b59a" stroke="#8b7355"/>
+                            <circle cx="22" cy="14" r="11" fill="#0f766e"/><text x="22" y="18" text-anchor="middle" font-size="10" fill="#fff" font-weight="700">05</text>
+                        </g>
+                        <g transform="translate(160,128)">
+                            <rect width="44" height="28" rx="2" fill="#c4b59a" stroke="#8b7355"/>
+                            <circle cx="22" cy="14" r="11" fill="#0f766e"/><text x="22" y="18" text-anchor="middle" font-size="10" fill="#fff" font-weight="700">06</text>
+                        </g>
+                        <g transform="translate(40,178)">
+                            <rect width="44" height="28" rx="2" fill="#c4b59a" stroke="#8b7355"/>
+                            <rect x="11" y="3" width="22" height="22" rx="3" fill="#b45309"/><text x="22" y="18" text-anchor="middle" font-size="10" fill="#fff" font-weight="700">07</text>
+                        </g>
+                        <g transform="translate(100,178)">
+                            <rect width="44" height="28" rx="2" fill="#c4b59a" stroke="#8b7355"/>
+                            <rect x="11" y="3" width="22" height="22" rx="3" fill="#b45309"/><text x="22" y="18" text-anchor="middle" font-size="10" fill="#fff" font-weight="700">08</text>
+                        </g>
+                    </g>
+                    <rect x="290" y="42" width="110" height="90" fill="#fef3c7" stroke="#fbbf24"/>
+                    <text x="345" y="88" text-anchor="middle" font-size="11" fill="#92400e">会議室 A</text>
+                    <rect x="290" y="148" width="110" height="114" fill="#dcfce7" stroke="#86efac"/>
+                    <text x="345" y="208" text-anchor="middle" font-size="11" fill="#166534">通路 / 受付</text>
+                </svg>
+                <figcaption>完成イメージ：机の上に連番オブジェクト（円・四角、色分け）を置く</figcaption>
+            </figure>
+        </header>
+
+        <nav class="toc" aria-label="目次">
+            <h2>目次</h2>
+            <ol>
+                <li><a href="#start">起動と画面の見方</a></li>
+                <li><a href="#crop">切り抜き・レイヤーで図面の一部をPDF化する</a></li>
+                <li><a href="#import">切り出した図面を取り込んで席に置く</a></li>
+                <li><a href="#look">オブジェクトの色・形を変える</a></li>
+                <li><a href="#move">位置をずらす・整列する・コピー＆ペースト</a></li>
+                <li><a href="#export">番号付きPDFを出力する</a></li>
+                <li><a href="#keys">ショートカット</a></li>
+            </ol>
+        </nav>
+
+        <section id="start">
+            <h2 class="sec">1. 起動と画面の見方</h2>
+            <ol class="steps">
+                <li>ZIPを解凍し、<strong>index.html</strong> をダブルクリックしてブラウザで開きます（このファイル1つで起動できます）。</li>
+                <li>ヘッダー左の <span class="ui">配置</span> と <span class="ui">切り抜き・レイヤー</span> で作業画面を切り替えます。席番の配置は「配置」、図面の切り出しは「切り抜き・レイヤー」です。</li>
+                <li>作業名を入力して <span class="ui">保存</span> します。同じ作業名は履歴でグループ化されます。初期値5分の自動保存もあります。</li>
+            </ol>
+            <div class="tip">同じ場所の <code>index.html</code> を開き直せば保存履歴が残ります。ファイルを別フォルダへ移すと別データ扱いになることがあります。</div>
+        </section>
+
+        <section id="crop">
+            <h2 class="sec">2. 切り抜き・レイヤーで図面の一部をPDF化する</h2>
+            <p>全館や複数フロアが入った大きな図面から、「3F執務室だけ」を帳票サイズのPDFにする作業です。</p>
+            <figure class="floor-card">
+                <svg viewBox="0 0 520 220" role="img" aria-label="全体図面から執務室だけを切り出すイメージ">
+                    <rect x="6" y="6" width="508" height="208" rx="8" fill="#f8fafc" stroke="#94a3b8"/>
+                    <text x="18" y="26" font-size="12" fill="#334155" font-weight="700">元PDF（全体レイアウト）</text>
+                    <rect x="18" y="40" width="150" height="150" fill="#e2e8f0" stroke="#94a3b8"/>
+                    <text x="93" y="118" text-anchor="middle" font-size="11" fill="#475569">1F</text>
+                    <rect x="180" y="40" width="150" height="150" fill="#e2e8f0" stroke="#94a3b8"/>
+                    <text x="255" y="118" text-anchor="middle" font-size="11" fill="#475569">2F</text>
+                    <rect x="342" y="40" width="150" height="150" fill="#eef2ff" stroke="#4f46e5" stroke-width="3" stroke-dasharray="6 4"/>
+                    <text x="417" y="78" text-anchor="middle" font-size="11" fill="#4338ca">3F 執務室</text>
+                    <text x="417" y="160" text-anchor="middle" font-size="10" fill="#4f46e5">← この枠が抽出エリア</text>
+                </svg>
+                <figcaption>切り抜き・レイヤー画面の点線枠が、出力される1ページになります</figcaption>
+            </figure>
+            <ol class="steps">
+                <li><span class="ui">PDF読込</span> で、オフィス全体のレイアウトPDFを開きます。</li>
+                <li>ヘッダーの <span class="ui">切り抜き・レイヤー</span> を押します。配置用の左右パネルが消え、抽出用の操作が出ます。</li>
+                <li><span class="ui">帳票</span> でサイズ（例: A4）と向き（縦／横）を選び、<span class="ui orange">範囲追加</span> を押します。現在ページに帳票比率の枠が乗ります。</li>
+                <li>枠をドラッグして執務室の上へ移動し、角ハンドルで拡縮します。机が枠内に収まるようにします。</li>
+                <li>左の「抽出エリア（出力順）」に枠が一覧されます。複数フロアなら枠を複数追加します。並び順が出力ページ順です。不要な枠は選んで <span class="ui">範囲削除</span> します。</li>
+                <li>元PDFにレイヤー（OCG）がある場合は左の「PDFレイヤー」で表示／非表示を切り替えます。寸法線だけ消したいときなどに使います。</li>
+                <li>ヘッダー右の出力で、対象を <span class="ui">指定範囲</span> にし、<span class="ui green">PDF出力</span> を押します。帳票サイズに拡大した切り出しPDF（<code>*_edited.pdf</code>）が保存されます。下絵はパス／文字のままです。</li>
+            </ol>
+            <div class="note">切り出し直後のPDFには、まだ席番号は入っていません。番号は次の「配置」作業で載せます。</div>
+        </section>
+
+        <section id="import">
+            <h2 class="sec">3. 切り出した図面を取り込んで席に置く</h2>
+            <ol class="steps">
+                <li><span class="ui">配置</span> 画面に戻します。</li>
+                <li><span class="ui">PDF読込</span> で、手順2で出力したフロア図PDFを開きます。配置データがある場合は消すか残すかを確認されます。新しい図面なら消して構いません。</li>
+                <li>左のグループマスターで <span class="ui">新規</span> を押し、グループを作ります。グループは「席番号シールの原版」です。例: グループ名「一般席」、基本テキスト <code>{auto:000}</code>、開始番号 1。</li>
+                <li>カードをクリックして、これから置くグループを選びます。</li>
+                <li>ヘッダーの <span class="ui">登録</span> を押し、机の上をクリックします。クリックした位置にオブジェクトが1つ置かれ、連番が進みます。</li>
+                <li>右の「配置済みリスト」に番号順で並びます。ハンドルをドラッグすると連番（<code>order</code>）が入れ替わります。</li>
+            </ol>
+            <div class="tip">グループ未作成のまま登録すると警告が出ます。先に <span class="ui">新規</span> で原版を作ってください。部署ごとに色を変えたいときは、グループを複数作ります（例: 一般席＝青円、管理職＝茶四角）。</div>
+            <h3>基本テキスト（連番の書き方）</h3>
+            <table>
+                <thead><tr><th>記法</th><th>席番での使い方</th></tr></thead>
+                <tbody>
+                    <tr><td><code>{auto}</code></td><td>1, 2, 3…（開始番号＋順番）</td></tr>
+                    <tr><td><code>{auto:000}</code></td><td>001, 002… ゼロ埋めで揃える</td></tr>
+                    <tr><td><code>{auto:A-Z}</code></td><td>A, B, C… アルファベット循環</td></tr>
+                    <tr><td><code>{auto:A01-A10}</code></td><td>A01〜A10 のような文字＋数字</td></tr>
+                </tbody>
+            </table>
+        </section>
+
+        <section id="look">
+            <h2 class="sec">4. オブジェクトの色・形を変える</h2>
+            <p>見た目はまずグループ設定で一括変更します。特定の席だけ変えたいときは、オブジェクトをダブルクリックして個別上書きします。</p>
+            <div class="shape-row">
+                <div class="shape-item">
+                    <svg width="48" height="48"><rect x="8" y="8" width="32" height="32" fill="#fff" stroke="#111" stroke-width="2"/></svg>
+                    四角形
+                </div>
+                <div class="shape-item">
+                    <svg width="48" height="48"><circle cx="24" cy="24" r="16" fill="#fff" stroke="#111" stroke-width="2"/></svg>
+                    円形
+                </div>
+                <div class="shape-item">
+                    <svg width="48" height="48"><polygon points="24,6 44,42 4,42" fill="#fff" stroke="#111" stroke-width="2"/></svg>
+                    三角形
+                </div>
+                <div class="shape-item">
+                    <svg width="48" height="48"><polygon points="24,4 29,18 44,18 32,27 36,42 24,33 12,42 16,27 4,18 19,18" fill="#fff" stroke="#111" stroke-width="2"/></svg>
+                    星形
+                </div>
+                <div class="shape-item">
+                    <svg width="48" height="48"><line x1="6" y1="24" x2="42" y2="24" stroke="#111" stroke-width="3"/><polygon points="42,24 32,18 32,30" fill="#111"/></svg>
+                    一本線
+                </div>
+            </div>
+            <h3>グループでまとめて変える（推奨）</h3>
+            <ol class="steps">
+                <li>左のカードで対象グループを選びます。</li>
+                <li>「枠の形」で <strong>四角形 / 円形 / 三角形 / 星形 / 一本線</strong> を選びます。席番は円形か四角形が扱いやすいです。</li>
+                <li>幅・高さ（pt）でシールサイズを決めます。「自動幅」をオンにすると文字量に合わせて拡縮します。</li>
+                <li>「枠線描画」で枠の有無、「線の太さ」「枠線色」で輪郭を決めます。</li>
+                <li>「文字サイズ」「文字色」「フォント」で番号の見た目を決めます。画面プレビュー用です。PDFで「番号もオブジェクト」出力するときは埋め込みフォントは Noto Sans JP になります。</li>
+                <li>「背景色」と「背景不透明度 (0-1)」で塗りを決めます。不透明度 0 は透明（机の絵が透ける）、1 は塗りつぶしです。席を目立たせるなら 0.8〜1、図面を残したいなら 0.2〜0.5 が目安です。</li>
+                <li>一本線を選んだときだけ、始点・終点形状（なし / 矢印 / 丸）と端点サイズが出ます。動線や向きの指示に使います。</li>
+            </ol>
+            <div class="tip">グループ設定を変えると、個別上書きしていない席へ一括反映されます。よく使う見た目は <span class="ui">この内容を初期グループにする</span> で保存すると、次の「新規」から同じ設定で作れます。</div>
+            <h3>1席だけ色や形を変える</h3>
+            <ol class="steps">
+                <li><span class="ui">選択</span> モードで対象をクリックするか、リストをダブルクリックします。「アイテム詳細設定」が開きます。</li>
+                <li>変えたい項目のチェック（枠の形、枠線色、文字色、背景色 など）をオンにしてから値を変更します。チェックを入れた項目だけグループ設定を上書きします。</li>
+                <li>位置は同じ画面の X / Y（pt）でも数値指定できます。</li>
+            </ol>
+        </section>
+
+        <section id="move">
+            <h2 class="sec">5. 位置をずらす・整列する・コピー＆ペースト</h2>
+            <h3>位置をずらす</h3>
+            <ol class="steps">
+                <li><span class="ui">選択</span> を押し、オブジェクトをクリックします。ドラッグで机の中心へ寄せます。</li>
+                <li>複数をまとめて動かすときは、Shift+クリック、または何もないところをドラッグして範囲選択します。</li>
+                <li>キーボードの矢印キーで微調整します。移動量は右サイドバー「矢印キー移動量 (pt)」です（初期 1.0pt）。</li>
+                <li>単一選択時は角ハンドルでリサイズできます。一本線は端点をドラッグします。</li>
+                <li>グループまたはアイテムの「ロック」がオンだと、移動・リサイズ・整列・端点編集ができません。</li>
+            </ol>
+            <h3>整列</h3>
+            <p>同じ列の机に番号を揃えるときに使います。複数選択が必要です。均等割りは3件以上です。ロック中は対象外です。</p>
+            <table>
+                <thead><tr><th>場所</th><th>ボタン</th><th>席番での使い方</th></tr></thead>
+                <tbody>
+                    <tr><td>横整列</td><td>左 / 中央 / 右 / 均等</td><td>横一列の机で、番号の左右位置をそろえる。均等は席間隔を等間隔にする</td></tr>
+                    <tr><td>縦整列</td><td>上 / 中 / 下 / 均等</td><td>縦一列の机で上下をそろえる（PDF座標は上が +Y）</td></tr>
+                </tbody>
+            </table>
+            <h3>コピー＆ペースト</h3>
+            <ol class="steps">
+                <li>コピーしたい席を選択します。</li>
+                <li>右リストの <span class="ui">コピー</span>、または <kbd>Ctrl</kbd>+<kbd>C</kbd>（Mac は <kbd>Cmd</kbd>+<kbd>C</kbd>）を押します。</li>
+                <li><span class="ui">貼り付け</span> または <kbd>Ctrl</kbd>+<kbd>V</kbd> で複製されます。少しずらした位置に置かれ、連番はグループの並びに合わせて振り直されます。</li>
+                <li>同じ並びに机が続くときは、1席の見た目を決めてからコピーし、貼り付け後に整列すると速いです。</li>
+            </ol>
+            <div class="note">貼り付け先に同じグループがあれば、そのグループに属します。元に戻すときは <span class="ui">戻す</span> か <kbd>Ctrl</kbd>+<kbd>Z</kbd> です。</div>
+        </section>
+
+        <section id="export">
+            <h2 class="sec">6. 番号付きPDFを出力する</h2>
+            <p>席を置き終わったら、ヘッダー右の「出力」から完成稿を書き出します。</p>
+            <ol class="steps">
+                <li>番号の重ね方を選びます。<span class="ui">番号もオブジェクト</span>（既定）は拡大しても番号がぼけにくく、文字を選択できます。<span class="ui">番号は画像</span> は番号だけ透過PNGで重ねます。下絵の図面はどちらも全面画像化しません。</li>
+                <li>出力対象を選びます。フロア図1枚なら <span class="ui">全ページ</span>。切り抜き枠のまま出したいときだけ <span class="ui">指定範囲</span> です。</li>
+                <li>「表示レイヤーのみ」をオンにすると、切り抜き画面で非表示にしたPDFレイヤーは出ません。</li>
+                <li><span class="ui green">PDF出力</span> を押すと <code>*_edited.pdf</code> がダウンロードされます。</li>
+            </ol>
+            <h3>このマニュアル自体のPDF化</h3>
+            <p>画面上の <strong>このマニュアルをPDF出力</strong> を押すと、ブラウザの印刷ダイアログが開きます。送信先（プリンター）で <strong>PDFに保存</strong> / <strong>Microsoft Print to PDF</strong> を選び、保存してください。用紙は A4 想定です。</p>
+        </section>
+
+        <section id="keys">
+            <h2 class="sec">7. ショートカット</h2>
+            <table>
+                <thead><tr><th>操作</th><th>方法</th></tr></thead>
+                <tbody>
+                    <tr><td>選択 / 登録</td><td>ヘッダー「選択」「登録」</td></tr>
+                    <tr><td>元に戻す</td><td>Ctrl+Z（Mac は Cmd+Z）</td></tr>
+                    <tr><td>やり直し</td><td>Ctrl+Y または Ctrl+Shift+Z</td></tr>
+                    <tr><td>微調整</td><td>矢印キー（移動量は右サイドバー）</td></tr>
+                    <tr><td>削除</td><td>Delete / Backspace（入力中は除く）</td></tr>
+                    <tr><td>複数選択</td><td>Shift+クリック、または空欄ドラッグ</td></tr>
+                    <tr><td>コピー / 貼り付け</td><td>Ctrl+C / Ctrl+V（リストのボタンでも可）</td></tr>
+                    <tr><td>詳細設定</td><td>オブジェクトをダブルクリック</td></tr>
+                    <tr><td>閉じる / 選択解除</td><td>Esc</td></tr>
+                </tbody>
+            </table>
+            <p>アプリ画面の <span class="ui">操作ヘルプ</span> からも同じ概要を開けます。</p>
+        </section>
+
+        <footer>
+            PDF配置ツール 利用マニュアル — オフィス席番の流れ　／　印刷時はヘッダー操作は出ません
+        </footer>
+    </div>
+    <script>
+        (function () {
+            var params = new URLSearchParams(location.search);
+            if (params.get("print") === "1") {
+                window.addEventListener("load", function () { window.print(); });
+            }
+        })();
+    </script>
+</body>
+</html>
