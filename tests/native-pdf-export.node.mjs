@@ -77,8 +77,8 @@ async function main() {
     assert(!appCoreSrc.includes('rasterizePdfPage'), '出力で pdf.js ラスタを使わない');
     assert(appCoreSrc.includes("toDataURL('image/png')"), '番号画像経路は PNG 合成する');
     assert(appCoreSrc.includes('overlayVectorObjects'), 'オブジェクト描画経路がある');
-    assert(appCoreSrc.includes('if (this.basePdfBytes)'), '切り出しでも下絵を常に embedPdf する');
-    assert(appCoreSrc.includes('clipPageAndDrawEmbedded'), '切り出しは Form XObject をクリップ描画する');
+    assert(appCoreSrc.includes('if (this.basePdfBytes)'), '切り出しでも下絵PDFを読み込む');
+    assert(appCoreSrc.includes('copyCroppedPageToPaper'), '切り出しは元ページを copyPages して拡大する');
     assert(appCoreSrc.includes('drawImage(this.pdfCanvas'), '重ねキャンバスに下絵をコピーする');
     const dbSrc = readFileSync(join(root, 'DBManager.js'), 'utf8');
     assert(dbSrc.includes('createMemoryDatabase'), 'file:// ではメモリDBを使う');

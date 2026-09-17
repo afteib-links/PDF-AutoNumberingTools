@@ -76,19 +76,19 @@ async function main() {
     const srcBytes = await src.save();
     const srcLoaded = await PDFLib.PDFDocument.load(srcBytes);
     const out = await PDFLib.PDFDocument.create();
-    const [emb] = await out.embedPdf(srcLoaded, [0]);
-    const page = out.addPage([100, 141.4]);
-    PdfLayoutTools.clipPageAndDrawEmbedded(
-        page,
-        emb,
+    const cropPaper = { width: 100, height: 141.4 };
+    const page = await PdfLayoutTools.copyCroppedPageToPaper(
+        out,
+        srcLoaded,
+        0,
         { x: 10, y: 20, width: 50, height: 70.7 },
-        { width: 100, height: 141.4 },
-        PDFLib
+        cropPaper
     );
+    const size = page.getSize();
+    assert(nearly(size.width, 100) && nearly(size.height, 141.4), '切り出しページは帳票サイズ');
     const bytes = await out.save({ useObjectStreams: false });
     assert(bytes.length > 100, '切り出しページを保存できる');
     const raw = Buffer.from(bytes).toString('latin1');
-    assert(/\/Subtype\s*\/Form/.test(raw), '下絵は Form XObject として埋め込む');
     assert(!raw.includes('IDAT'), '切り出し下絵を PNG にしない');
     const parts = [];
     const re = /stream\r?\n([\s\S]*?)endstream/g;
@@ -106,8 +106,8 @@ async function main() {
         }
     }
     const decoded = parts.join('\n');
-    assert(/<535243>/.test(decoded), '元ページのテキスト（SRC）が Form 内に残る');
-    assert(/EmbeddedPdfPage-\d+ Do/.test(decoded), '切り出しページは埋め込みページを Do で描画する');
+    assert(/SRC|<535243>/.test(decoded), '元ページのテキスト（SRC）が内容ストリームに残る');
+    assert(!/EmbeddedPdfPage-\d+ Do/.test(decoded), '切り出しは Form XObject の Do にしない');
 
     const srcClamp = PdfLayoutTools.clampDrawImageSource(-10, -5, 40, 20, 100, 80);
     assert(srcClamp.sx === 0 && srcClamp.sy === 0, '負の切り出し原点を 0 にクランプ');
