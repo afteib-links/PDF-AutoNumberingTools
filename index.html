@@ -2134,6 +2134,35 @@ if (typeof window.CoordinateConverter === 'undefined') {
         }
     }
 
+    /**
+     * 抽出枠を帳票サイズへ。Form XObject 経由だとビューアが低解像度ラスタにすることがあるため、
+     * 元ページを copyPages し、内容ストリームを平行移動・拡大する。
+     */
+    async function copyCroppedPageToPaper(outDoc, srcDoc, pageIndex, region, paper) {
+        const [page] = await outDoc.copyPages(srcDoc, [pageIndex]);
+        outDoc.addPage(page);
+
+        const rw = Math.max(0.01, Number(region.width) || 0.01);
+        const rh = Math.max(0.01, Number(region.height) || 0.01);
+        const scaleX = paper.width / rw;
+        const scaleY = paper.height / rh;
+
+        page.translateContent(-Number(region.x) || 0, -Number(region.y) || 0);
+        page.scaleContent(scaleX, scaleY);
+        if (typeof page.scaleAnnotations === 'function') {
+            try {
+                page.scaleAnnotations(scaleX, scaleY);
+            } catch (e) { /* 注釈なし */ }
+        }
+
+        page.setMediaBox(0, 0, paper.width, paper.height);
+        page.setCropBox(0, 0, paper.width, paper.height);
+        if (typeof page.setBleedBox === 'function') page.setBleedBox(0, 0, paper.width, paper.height);
+        if (typeof page.setTrimBox === 'function') page.setTrimBox(0, 0, paper.width, paper.height);
+        if (typeof page.setArtBox === 'function') page.setArtBox(0, 0, paper.width, paper.height);
+        return page;
+    }
+
     function clipPageAndDrawEmbedded(page, embeddedPage, region, paper, PDF) {
         const scale = paper.width / region.width;
         const ops = [];
@@ -2231,6 +2260,7 @@ if (typeof window.CoordinateConverter === 'undefined') {
         mapInstanceToRegion: mapInstanceToRegion,
         listOptionalContentLayers: listOptionalContentLayers,
         applyOcgVisibility: applyOcgVisibility,
+        copyCroppedPageToPaper: copyCroppedPageToPaper,
         clipPageAndDrawEmbedded: clipPageAndDrawEmbedded,
         decodePdfName: decodePdfName,
         MAX_RASTER_EDGE: MAX_RASTER_EDGE,
@@ -3780,13 +3810,11 @@ class PdfEditorCore {
         const { PDFDocument } = PDFLib;
         const outDoc = await PDFDocument.create();
         let srcDoc = null;
-        let embeddedPages = [];
         if (this.basePdfBytes) {
             srcDoc = await PDFDocument.load(this.getCleanPdfBytes(), { ignoreEncryption: true });
             if (this.respectLayerVisibility) {
                 PdfLayoutTools.applyOcgVisibility(srcDoc, this.layerVisibilityByName);
             }
-            embeddedPages = await outDoc.embedPdf(srcDoc, srcDoc.getPageIndices());
         }
 
         let vectorFont = null;
@@ -3812,11 +3840,9 @@ class PdfEditorCore {
         for (let i = 0; i < this.cropRegions.length; i++) {
             const region = this.cropRegions[i];
             const paper = PdfLayoutTools.getPaperSize(region.paperKey, region.landscape);
-            const page = outDoc.addPage([paper.width, paper.height]);
-            const emb = embeddedPages[region.pageIndex];
-            if (emb) {
-                PdfLayoutTools.clipPageAndDrawEmbedded(page, emb, region, paper, PDFLib);
-            }
+            const page = srcDoc
+                ? await PdfLayoutTools.copyCroppedPageToPaper(outDoc, srcDoc, region.pageIndex, region, paper)
+                : outDoc.addPage([paper.width, paper.height]);
 
             if (exportMode === 'vector') {
                 const pageInstances = this.getSortedVisiblePageInstances(region.pageIndex);

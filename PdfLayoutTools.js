@@ -378,6 +378,35 @@
         }
     }
 
+    /**
+     * 抽出枠を帳票サイズへ。Form XObject 経由だとビューアが低解像度ラスタにすることがあるため、
+     * 元ページを copyPages し、内容ストリームを平行移動・拡大する。
+     */
+    async function copyCroppedPageToPaper(outDoc, srcDoc, pageIndex, region, paper) {
+        const [page] = await outDoc.copyPages(srcDoc, [pageIndex]);
+        outDoc.addPage(page);
+
+        const rw = Math.max(0.01, Number(region.width) || 0.01);
+        const rh = Math.max(0.01, Number(region.height) || 0.01);
+        const scaleX = paper.width / rw;
+        const scaleY = paper.height / rh;
+
+        page.translateContent(-Number(region.x) || 0, -Number(region.y) || 0);
+        page.scaleContent(scaleX, scaleY);
+        if (typeof page.scaleAnnotations === 'function') {
+            try {
+                page.scaleAnnotations(scaleX, scaleY);
+            } catch (e) { /* 注釈なし */ }
+        }
+
+        page.setMediaBox(0, 0, paper.width, paper.height);
+        page.setCropBox(0, 0, paper.width, paper.height);
+        if (typeof page.setBleedBox === 'function') page.setBleedBox(0, 0, paper.width, paper.height);
+        if (typeof page.setTrimBox === 'function') page.setTrimBox(0, 0, paper.width, paper.height);
+        if (typeof page.setArtBox === 'function') page.setArtBox(0, 0, paper.width, paper.height);
+        return page;
+    }
+
     function clipPageAndDrawEmbedded(page, embeddedPage, region, paper, PDF) {
         const scale = paper.width / region.width;
         const ops = [];
@@ -475,6 +504,7 @@
         mapInstanceToRegion: mapInstanceToRegion,
         listOptionalContentLayers: listOptionalContentLayers,
         applyOcgVisibility: applyOcgVisibility,
+        copyCroppedPageToPaper: copyCroppedPageToPaper,
         clipPageAndDrawEmbedded: clipPageAndDrawEmbedded,
         decodePdfName: decodePdfName,
         MAX_RASTER_EDGE: MAX_RASTER_EDGE,

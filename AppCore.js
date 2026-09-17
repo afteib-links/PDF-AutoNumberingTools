@@ -1143,13 +1143,11 @@ class PdfEditorCore {
         const { PDFDocument } = PDFLib;
         const outDoc = await PDFDocument.create();
         let srcDoc = null;
-        let embeddedPages = [];
         if (this.basePdfBytes) {
             srcDoc = await PDFDocument.load(this.getCleanPdfBytes(), { ignoreEncryption: true });
             if (this.respectLayerVisibility) {
                 PdfLayoutTools.applyOcgVisibility(srcDoc, this.layerVisibilityByName);
             }
-            embeddedPages = await outDoc.embedPdf(srcDoc, srcDoc.getPageIndices());
         }
 
         let vectorFont = null;
@@ -1175,11 +1173,9 @@ class PdfEditorCore {
         for (let i = 0; i < this.cropRegions.length; i++) {
             const region = this.cropRegions[i];
             const paper = PdfLayoutTools.getPaperSize(region.paperKey, region.landscape);
-            const page = outDoc.addPage([paper.width, paper.height]);
-            const emb = embeddedPages[region.pageIndex];
-            if (emb) {
-                PdfLayoutTools.clipPageAndDrawEmbedded(page, emb, region, paper, PDFLib);
-            }
+            const page = srcDoc
+                ? await PdfLayoutTools.copyCroppedPageToPaper(outDoc, srcDoc, region.pageIndex, region, paper)
+                : outDoc.addPage([paper.width, paper.height]);
 
             if (exportMode === 'vector') {
                 const pageInstances = this.getSortedVisiblePageInstances(region.pageIndex);
